@@ -1,34 +1,63 @@
-import { chartData } from './data_mock.js';
-import { getDimension, getMultiplier } from './helpers.js';
+import {chartData} from './data_mock.js';
+import {formatDate, getDimension, getMultiplier, getLabelWidth} from './helpers.js';
 
-
-window.onload = main;
-
-async function main() {
+const main = async () => {
     const data = await getData();
 
-    draw(data);
-}
+    const canvas = document.getElementById('subscribers-chart');
+    const container = document.querySelector('.chart-container');
 
-async function getData() {
+    let isDragging = false;
+    let lastX = 0;
+    let marginLeft = 0;
+
+    canvas.addEventListener('touchstart', event => {
+        isDragging = true;
+        lastX = event.touches[0].clientX;
+
+        event.preventDefault();
+    });
+
+    canvas.addEventListener('touchmove', event => {
+        if (isDragging) {
+            const x = event.touches[0].clientX;
+            const delta = x - lastX;
+
+            lastX = x;
+            marginLeft = Math.max(-(container.clientWidth), Math.min(marginLeft + delta, 0));
+
+            canvas.style.marginLeft = marginLeft + "px";
+        }
+
+        event.preventDefault();
+    });
+
+    window.addEventListener('touchend', () => {
+        isDragging = false;
+    });
+
+    draw(canvas, data);
+};
+
+const getData = async () => {
     // replace with a call to actual API
     return Promise.resolve(chartData);
-}
+};
 
-function draw(chartData) {
+const draw = (canvas, chartData) => {
     console.log('init draw');
 
     const horizontalLines = 5;
 
-	const canvas = document.getElementById('subscribers-chart');
     const ctx = canvas.getContext('2d');
     const {width, height} = canvas;
 
     const labelsOffset = 40;
     const chartHeight = height - labelsOffset;
+    const chartWidth = width;
 
     // calculations
-    const maxPoint = Math.max(...chartData.map(chart => Math.max(...chart.points)));
+    const maxPoint = Math.max(...chartData.map(chart => Math.max(...chart.dataPoints)));
     console.log(`maxPoint: ${maxPoint}`);
 
     const dimension = getDimension(maxPoint, horizontalLines);
@@ -37,15 +66,18 @@ function draw(chartData) {
     const multiplier = getMultiplier(chartHeight, maxPoint);
     console.log(`multiplier: ${multiplier}`);
 
+    const dates = chartData[0].dates.map(d => new Date(...d));
+    const step = width / chartData[0].dataPoints.length;
+
     // drawing
-    drawGrid(ctx, width, height, labelsOffset, dimension);
+    drawGrid(ctx, width, height, labelsOffset, dimension, step, dates);
 
     chartData.forEach(chart => {
-        drawChart(ctx, width, chartHeight, chart, multiplier);
+        drawChart(ctx, chartWidth, chartHeight, chart, step, multiplier);
     });
-}
+};
 
-function drawGrid(ctx, canvasWidth, canvasHeight, labelsOffset, dimension) {
+const drawGrid = (ctx, canvasWidth, canvasHeight, labelsOffset, dimension, step, dates) => {
     console.log('drawing grid');
 
     // styling
@@ -64,33 +96,49 @@ function drawGrid(ctx, canvasWidth, canvasHeight, labelsOffset, dimension) {
         ctx.beginPath();
         ctx.moveTo(0, height);
         ctx.lineTo(canvasWidth, height);
-        ctx.fillText(dimension * i, 12, height - 6);
+        ctx.fillText(dimension * i, 0, height - 6);
         ctx.stroke();
     }
-}
 
-function drawChart(ctx, canvasWidth, chartHeight, chart, multiplier) {
+    ctx.lineWidth = 1;
+
+    for (let i = 1; i < dates.length; i++) {
+
+        ctx.beginPath();
+        ctx.moveTo(step * i, chartHeight);
+        ctx.lineTo(step * i, 0);
+        ctx.stroke();
+
+        const label = formatDate(dates[i]);
+        const offset = getLabelWidth(label, 18) / 2;
+
+        ctx.fillText(label, step * i - offset, chartHeight + 20);
+    }
+};
+
+const drawChart = (ctx, chartWidth, chartHeight, chart, step, multiplier) => {
     console.log('drawing chart');
 
-    const {points, color} = chart;
+    const {dataPoints, color} = chart;
 
     // styling
     ctx.lineWidth = 1;
 
-    const step = canvasWidth / points.length;
     let curX = 0;
-    let curY = chartHeight;
+    let curY = chartHeight - dataPoints[0] * multiplier;
 
     // drawing
     ctx.beginPath();
     ctx.moveTo(curX, curY);
     ctx.strokeStyle = color;
 
-    for (let i = 0; i < points.length; i++) {
+    for (let i = 1; i < dataPoints.length; i++) {
         curX += step;
-        curY = chartHeight - points[i] * multiplier;
+        curY = chartHeight - dataPoints[i] * multiplier;
         ctx.lineTo(curX, curY);
     }
 
     ctx.stroke();
-}
+};
+
+window.onload = main;

@@ -1,3 +1,8 @@
-canvas {
+.chart-container {
+    width: 900px;
+    overflow: hidden;
+}
 
+#subscribers-chart {
+    padding-left: 20px;
 }

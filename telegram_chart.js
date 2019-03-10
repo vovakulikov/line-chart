@@ -1,5 +1,6 @@
-import {chartData} from './data_mock.js';
-import {formatDate, getDimension, getMultiplier, getLabelWidth} from './helpers.js';
+import {chartData} from './chart_data.js';
+import {formatDate, getDimension, getLabelWidth, getMultiplier} from './helpers.js';
+import settings from "./settings.js";
 
 let chartViewConfig = {
     viewport: {},
@@ -14,10 +15,11 @@ const initViewport = {
 };
 
 const main = async () => {
-    const data = await getData();
+    const data = (await getData())[0];
+
     initState(data);
 
-    const canvas = document.getElementById('subscribers-chart');
+    const canvas = document.querySelector('.subscribers-chart');
     const chartContainer = document.querySelector('.chart-container');
     const legend = document.querySelector('.chart-legend');
 
@@ -27,47 +29,7 @@ const main = async () => {
         legend.appendChild(button);
     });
 
-    // scrolling
-    let isDragging = false;
-    let lastX = 0;
-    let marginLeft = 0;
-
-    canvas.addEventListener('touchstart', event => {
-        isDragging = true;
-        lastX = event.touches[0].clientX;
-
-        event.preventDefault();
-    });
-
-    canvas.addEventListener('touchmove', event => {
-        if (isDragging) {
-            const x = event.touches[0].clientX;
-            const delta = x - lastX;
-
-            lastX = x;
-            marginLeft = Math.max(-(canvas.width - chartContainer.clientWidth), Math.min(marginLeft + delta, 0));
-
-            canvas.style.transform = `translateX(${marginLeft}px)`;
-
-            const viewportOffset = Math.abs(marginLeft / canvas.width);
-
-            chartViewConfig = {
-                ...chartViewConfig,
-                viewport: {
-                    start: Math.max(initViewport.start + viewportOffset),
-                    end: Math.max(initViewport.end + viewportOffset),
-                },
-                shouldUpdate: true,
-            };
-            // console.log(chartViewConfig);
-        }
-
-        event.preventDefault();
-    });
-
-    window.addEventListener('touchend', () => {
-        isDragging = false;
-    });
+    addScrollingListeners(canvas, chartContainer);
 
     // update cycle
     const update = () => {
@@ -83,6 +45,48 @@ const main = async () => {
     requestAnimationFrame(update);
 };
 
+const addScrollingListeners = (canvas, chartContainer) => {
+    // scrolling
+    let isDragging = false;
+    let lastX = 0;
+    let offsetLeft = 0;
+
+    canvas.addEventListener('touchstart', event => {
+        isDragging = true;
+        lastX = event.touches[0].clientX;
+        event.preventDefault();
+    });
+
+    canvas.addEventListener('touchmove', event => {
+        if (isDragging) {
+            const x = event.touches[0].clientX;
+            const delta = x - lastX;
+
+            lastX = x;
+            offsetLeft = Math.max(-(canvas.width - chartContainer.clientWidth), Math.min(offsetLeft + delta, 0));
+
+            canvas.style.transform = `translateX(${offsetLeft}px)`;
+
+            const viewportOffset = Math.abs(offsetLeft / canvas.width);
+
+            chartViewConfig = {
+                ...chartViewConfig,
+                viewport: {
+                    start: Math.max(initViewport.start + viewportOffset),
+                    end: Math.max(initViewport.end + viewportOffset),
+                },
+                shouldUpdate: true,
+            };
+        }
+
+        event.preventDefault();
+    });
+
+    window.addEventListener('touchend', () => {
+        isDragging = false;
+    });
+};
+
 const initState = (chartData) => {
     chartViewConfig = {
         ...chartViewConfig,
@@ -90,8 +94,8 @@ const initState = (chartData) => {
             start: 0.0,
             end: 0.3,
         },
-        chartDisplayState: chartData.reduce((acc, {label}) => {
-            acc[label] = true;
+        chartDisplayState: Object.keys(chartData.names).reduce((acc, id) => {
+            acc[id] = true;
             return acc;
         }, {}),
     }
@@ -108,7 +112,7 @@ const getData = async () => {
 };
 
 const makeLegendButtons = (chartData) => {
-    return chartData.map(chart => {
+    return Object.entries(chartData.names).map(([id, label]) => {
         const checkbox = document.createElement('input');
         checkbox.type = 'checkbox';
         checkbox.checked = true;
@@ -118,23 +122,24 @@ const makeLegendButtons = (chartData) => {
                 ...chartViewConfig,
                 chartDisplayState: {
                     ...chartViewConfig.chartDisplayState,
-                    [chart.label]: !chartViewConfig.chartDisplayState[chart.label],
+                    [id]: !chartViewConfig.chartDisplayState[id],
                 },
                 shouldUpdate: true,
             };
         });
 
-        return wrapLegendButton(checkbox, chart.label);
+        return wrapLegendButton(checkbox, label, chartData.colors[id]);
     });
 };
 
-const wrapLegendButton = (checkbox, labelText) => {
+const wrapLegendButton = (checkbox, labelText, color) => {
     const button = document.createElement('label');
     const text = document.createTextNode(labelText);
     const checkboxLabel = document.createElement('span');
     const checkboxBadge = document.createElement('span');
 
-    button.classList.add('chart-legend__button', 'legend-button', `legend-button_${labelText}`);
+    button.classList.add('chart-legend__button', 'legend-button');
+    button.style.color = color;
     checkbox.classList.add('legend-button__checkbox-input');
     checkboxLabel.classList.add('legend-button__text');
     checkboxBadge.classList.add('legend-button__checkbox-badge');
@@ -153,26 +158,35 @@ const draw = (canvas, chartData) => {
 
     ctx.clearRect(0, 0, width, height);
 
-    console.log('init draw');
     const horizontalLines = 5;
     const labelsOffset = 40;
     const chartHeight = height - labelsOffset;
     const chartWidth = width;
+    const xColumn = settings.data.xColumn;
 
     // calculations
-    const displayedCharts = chartData.filter(c => chartViewConfig.chartDisplayState[c.label]);
-    const maxPoint = Math.max(...displayedCharts.map(chart => Math.max(...chart.dataPoints)));
+    const displayedCharts = chartData.columns.filter(c => c[0] !== xColumn && chartViewConfig.chartDisplayState[c[0]]);
+
+    const maxPoint = Math.max(...displayedCharts.map(points => Math.max(...points.slice(1))));
+
     const dimension = getDimension(maxPoint, horizontalLines);
     const multiplier = getMultiplier(chartHeight, maxPoint);
-    const dates = chartData[0].dates.map(d => new Date(...d));
-    const step = width / chartData[0].dataPoints.length;
+
+    const dates = chartData.columns
+        .find(c => c[0] === xColumn)
+        .slice(1)
+        .map(timestamp => new Date(timestamp));
+
+    const step = width / displayedCharts[0].length;
 
     // drawing
     drawGrid(ctx, {canvasWidth: width, canvasHeight: height, labelsOffset, dimension, step, dates});
 
-    chartData.forEach(chart => {
-        if (chartViewConfig.chartDisplayState[chart.label]) {
-            drawChart(ctx, {chartWidth, chartHeight, chart, step, multiplier});
+    displayedCharts.forEach(chart => {
+        const columnId = chart[0];
+
+        if (chartViewConfig.chartDisplayState[columnId]) {
+            drawChart(ctx, {chartWidth, chartHeight, dataPoints: chart.slice(1), step, multiplier, color: chartData.colors[columnId]});
         }
     });
 
@@ -183,13 +197,11 @@ const draw = (canvas, chartData) => {
 };
 
 const drawGrid = (ctx, {canvasWidth, canvasHeight, labelsOffset, dimension, step, dates}) => {
-    console.log('drawing grid');
-
     // styling
-    ctx.strokeStyle = 'rgba(0, 0, 0, 0.16)';
-    ctx.lineWidth = 0.5;
-    ctx.font = '18px Arial';
-    ctx.fillStyle = 'rgba(0, 0, 0, 0.4)';
+    ctx.strokeStyle = settings.grid.strokeStyle;
+    ctx.lineWidth = settings.grid.yLineWidth;
+    ctx.font = `${settings.grid.fontSize}px ${settings.grid.font}`;
+    ctx.fillStyle = settings.grid.fillStyle;
 
     const verticalLineStep = Math.floor(canvasHeight / 6);
     const chartHeight = canvasHeight - labelsOffset;
@@ -197,44 +209,57 @@ const drawGrid = (ctx, {canvasWidth, canvasHeight, labelsOffset, dimension, step
     const labelsX = canvasWidth * viewport.start;
 
     // drawing
+    // y-axis labels
     for (let i = 0; i < 6; i++) {
         const height = Math.ceil(chartHeight - i * verticalLineStep);
+
+        ctx.save();
 
         ctx.beginPath();
         ctx.moveTo(0, height);
         ctx.lineTo(canvasWidth, height);
         ctx.fillText(dimension * i, labelsX, height - 6);
         ctx.stroke();
+
+        ctx.restore();
     }
 
-    ctx.lineWidth = 1;
+    ctx.lineWidth = settings.grid.xLineWidth;
 
-    for (let i = 1; i < dates.length; i++) {
+    // x-axis labels
+    let lastLabelEnd = 0;
 
-        ctx.beginPath();
-        ctx.moveTo(step * i, chartHeight);
-        ctx.lineTo(step * i, 0);
-        ctx.stroke();
-
+    for (let i = 0; i < dates.length; i++) {
         const label = formatDate(dates[i]);
-        const offset = getLabelWidth(label, 18) / 2;
+        const labelWidth = getLabelWidth(label, settings.grid.fontSize);
+        const x = i === 0 ? 0 : step * i - labelWidth / 2;
 
-        ctx.fillText(label, step * i - offset, chartHeight + 20);
+        if (i === 0 || x > lastLabelEnd + settings.grid.marginBetweenLabels) {
+            ctx.save();
+
+            // TODO: remove vertical lines
+            ctx.beginPath();
+            ctx.moveTo(step * i, chartHeight);
+            ctx.lineTo(step * i, 0);
+            ctx.stroke();
+
+            ctx.fillText(label, x, chartHeight + 20);
+            ctx.restore();
+
+            lastLabelEnd = x + labelWidth;
+        }
     }
 };
 
-const drawChart = (ctx, {chartWidth, chartHeight, chart, step, multiplier}) => {
-    console.log('drawing chart');
-
-    const {dataPoints, color} = chart;
-
+const drawChart = (ctx, {chartWidth, chartHeight, dataPoints, step, multiplier, color}) => {
     // styling
-    ctx.lineWidth = 1;
+    ctx.lineWidth = settings.chart.lineWidth;
 
     let curX = 0;
     let curY = chartHeight - dataPoints[0] * multiplier;
 
     // drawing
+    ctx.save();
     ctx.beginPath();
     ctx.moveTo(curX, curY);
     ctx.strokeStyle = color;
@@ -246,6 +271,7 @@ const drawChart = (ctx, {chartWidth, chartHeight, chart, step, multiplier}) => {
     }
 
     ctx.stroke();
+    ctx.restore();
 };
 
 window.onload = main;

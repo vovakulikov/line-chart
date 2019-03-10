@@ -4,6 +4,10 @@ body {
     font-family: sans-serif;
 }
 
+.app-container {
+    padding: 16px 24px 0;
+}
+
 .chart-header {
     padding: 0 24px;
     margin-bottom: 12px;
@@ -85,14 +89,6 @@ body {
     transform: scale(0);
 }
 
-.legend-button_Joined .legend-button__checkbox-badge {
-    color: green;
-}
-
-.legend-button_Left .legend-button__checkbox-badge {
-    color: red;
-}
-
 .legend-button__checkbox-input:checked + .legend-button__checkbox-badge::before {
     transform: scale(0);
 }
@@ -106,8 +102,4 @@ body {
     margin-left: 12px;
     user-select: none;
     -moz-user-select: none;
-}
-
-#subscribers-chart {
-    padding-left: 20px;
 }

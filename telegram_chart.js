@@ -26,7 +26,8 @@ const main = async () => {
             lastX = x;
             marginLeft = Math.max(-(container.clientWidth), Math.min(marginLeft + delta, 0));
 
-            canvas.style.marginLeft = marginLeft + "px";
+            console.log(`translateX(${marginLeft} + px)`);
+            canvas.style.transform = `translateX(${marginLeft}px)`;
         }
 
         event.preventDefault();

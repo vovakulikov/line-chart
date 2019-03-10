@@ -1,0 +1,115 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Minimap</title>
+
+    <style>
+        * { box-sizing: border-box;}
+
+        .wrap {
+            position: relative;
+            width: 500px;
+            height: 75px;
+            background-clip: padding-box;
+            overflow: hidden;
+        }
+
+        .slider {
+            position: absolute;
+            left: 0;
+            top: 0;
+            width: 100px;
+            height: 100%;
+            box-shadow: 0 20px 20px 500px #e0e2e466;
+            border-top: 2px solid #bacde073;
+            border-bottom: 2px solid #bacde073;
+        }
+
+        .left_hand {
+            width: 10px;
+            height: 100%;
+            background-color: #bacde073;
+
+            position: absolute;
+            top: 0;
+            left: 0;
+        }
+
+        .right_hand {
+            width: 10px;
+            height: 100%;
+            background-color: #bacde073;
+
+            position: absolute;
+            top: 0;
+            left: 100%;
+            transform: translate(-100%);
+        }
+
+        .map__touch-container {
+            position: absolute;
+            top: 0;
+            left: 0;
+        }
+
+        .map__touch-circle {
+            width: 120px;
+            height: 120px;
+
+            position: absolute;
+            top: 0;
+            left: 0;
+            border-radius: 50%;
+            background-color: #bacde073;
+            transform: scale(0) translate(-50%, -50%);
+            transform-origin: 0 0;
+            opacity: 0;
+            transition: transform 0.2s ease, opacity 0.2s ease;
+        }
+
+        .map__touch-container__is-visible {
+        }
+
+        .map__touch-container__is-visible > .map__touch-circle {
+            transform: scale(1) translate(-50%, -50%);
+            opacity: 1;
+        }
+
+        .map-container {
+            position: relative;
+        }
+
+        main {
+            margin: 100px auto;
+        }
+
+        body {
+            margin: 25px;
+        }
+
+    </style>
+</head>
+<body>
+
+
+    <main>
+
+        <div class="map-container">
+            <div class="map__touch-container">
+                <div class="map__touch-circle"></div>
+            </div>
+
+            <div class='wrap'>
+                <canvas width="500" height="75"></canvas>
+                <div class="slider">
+                    <div class="left_hand"></div>
+                    <div class="right_hand"></div>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <script type="text/javascript" src="chart-map.js"></script>
+</body>
+</html>

@@ -130,19 +130,22 @@ const makeLegendButtons = (chartData) => {
 };
 
 const wrapLegendButton = (checkbox, labelText) => {
-    const wrapper = document.createElement('div');
-    wrapper.classList.add('chart-legend__button');
-
-    const label = document.createElement('label');
-    label.classList.add('chart-legend__label');
-
+    const button = document.createElement('label');
     const text = document.createTextNode(labelText);
+    const checkboxLabel = document.createElement('span');
+    const checkboxBadge = document.createElement('span');
 
-    label.appendChild(checkbox);
-    label.appendChild(text);
-    wrapper.appendChild(label);
+    button.classList.add('chart-legend__button', 'legend-button', `legend-button_${labelText}`);
+    checkbox.classList.add('legend-button__checkbox-input');
+    checkboxLabel.classList.add('legend-button__text');
+    checkboxBadge.classList.add('legend-button__checkbox-badge');
 
-    return wrapper;
+    checkboxLabel.appendChild(text);
+    button.appendChild(checkbox);
+    button.appendChild(checkboxBadge);
+    button.appendChild(checkboxLabel);
+
+    return button;
 };
 
 const draw = (canvas, chartData) => {
@@ -186,7 +189,7 @@ const drawGrid = (ctx, {canvasWidth, canvasHeight, labelsOffset, dimension, step
     // styling
     ctx.strokeStyle = 'rgba(0, 0, 0, 0.16)';
     ctx.lineWidth = 0.5;
-    ctx.font = '18px Times New Roman';
+    ctx.font = '18px Arial';
     ctx.fillStyle = 'rgba(0, 0, 0, 0.4)';
 
     const verticalLineStep = Math.floor(canvasHeight / 6);

@@ -9,6 +9,10 @@ export const getMultiplier = (chartHeight, maxPoint) => {
     return chartHeight / maxPoint;
 };
 
+export const getViewportX = (canvasWidth, viewportStart) => {
+    return -(canvasWidth * viewportStart);
+};
+
 export const getLabelWidth = (text, fontSize) => {
     // TODO: check this function
     return text.length * fontSize / 2;

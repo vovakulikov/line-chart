@@ -1,4 +1,8 @@
 export default {
+    initViewport: {
+        start: 0.7,
+        end: 1.0,
+    },
     data: {
         xColumn: 'x',
     },

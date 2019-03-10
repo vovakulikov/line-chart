@@ -1,23 +1,20 @@
 import {chartData} from './chart_data.js';
-import {formatDate, getDimension, getLabelWidth, getMultiplier} from './helpers.js';
+import {formatDate, getDimension, getLabelWidth, getMultiplier, getViewportX} from './helpers.js';
 import settings from "./settings.js";
 
+// TODO: turn into a store and update with reducers
 let chartViewConfig = {
-    viewport: {},
+    viewport: {
+        start: 0.0,
+        end: 0.0,
+    },
     chartDisplayState: {},
     isNightMode: false,
     shouldUpdate: true,
 };
 
-const initViewport = {
-    start: 0.0,
-    end: 0.3,
-};
-
 const main = async () => {
     const data = (await getData())[0];
-
-    initState(data);
 
     const canvas = document.querySelector('.subscribers-chart');
     const chartContainer = document.querySelector('.chart-container');
@@ -28,6 +25,9 @@ const main = async () => {
     legendButtons.forEach(button => {
         legend.appendChild(button);
     });
+
+    initState(data);
+    canvas.width = calculateCanvasWidth(chartContainer.clientWidth, chartViewConfig.viewport);
 
     addScrollingListeners(canvas, chartContainer);
 
@@ -43,13 +43,14 @@ const main = async () => {
 
     // start drawing
     requestAnimationFrame(update);
+    scrollToViewport(canvas, chartContainer.clientWidth, chartViewConfig.viewport);
 };
 
 const addScrollingListeners = (canvas, chartContainer) => {
     // scrolling
     let isDragging = false;
     let lastX = 0;
-    let offsetLeft = 0;
+    let offsetLeft = getViewportX(canvas.width, chartViewConfig.viewport.start);
 
     canvas.addEventListener('touchstart', event => {
         isDragging = true;
@@ -68,12 +69,13 @@ const addScrollingListeners = (canvas, chartContainer) => {
             canvas.style.transform = `translateX(${offsetLeft}px)`;
 
             const viewportOffset = Math.abs(offsetLeft / canvas.width);
+            const viewportWidth = chartViewConfig.viewport.end - chartViewConfig.viewport.start;
 
             chartViewConfig = {
                 ...chartViewConfig,
                 viewport: {
-                    start: Math.max(initViewport.start + viewportOffset),
-                    end: Math.max(initViewport.end + viewportOffset),
+                    start: viewportOffset,
+                    end: Math.min(viewportOffset + viewportWidth, 1),
                 },
                 shouldUpdate: true,
             };
@@ -87,18 +89,20 @@ const addScrollingListeners = (canvas, chartContainer) => {
     });
 };
 
+const scrollToViewport = (canvas, containerWidth, {start, end}) => {
+    canvas.width = calculateCanvasWidth(containerWidth, {start, end});
+    canvas.style.transform = `translateX(${getViewportX(canvas.width, start)}px)`;
+};
+
 const initState = (chartData) => {
     chartViewConfig = {
         ...chartViewConfig,
-        viewport: {
-            start: 0.0,
-            end: 0.3,
-        },
+        viewport: settings.initViewport,
         chartDisplayState: Object.keys(chartData.names).reduce((acc, id) => {
             acc[id] = true;
             return acc;
         }, {}),
-    }
+    };
 };
 
 const calculateCanvasWidth = (containerWidth, {start, end}) => {
@@ -234,7 +238,8 @@ const drawGrid = (ctx, {canvasWidth, canvasHeight, labelsOffset, dimension, step
         const labelWidth = getLabelWidth(label, settings.grid.fontSize);
         const x = i === 0 ? 0 : step * i - labelWidth / 2;
 
-        if (i === 0 || x > lastLabelEnd + settings.grid.marginBetweenLabels) {
+        if (i === 0 || i ===  dates.length - 1 ||
+            x > lastLabelEnd + settings.grid.marginBetweenLabels) {
             ctx.save();
 
             // TODO: remove vertical lines

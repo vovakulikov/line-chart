@@ -1,12 +1,33 @@
 import {chartData} from './data_mock.js';
 import {formatDate, getDimension, getMultiplier, getLabelWidth} from './helpers.js';
 
+let chartViewConfig = {
+    viewport: {},
+    chartDisplayState: {},
+    isNightMode: false,
+    shouldUpdate: true,
+};
+
+const initViewport = {
+    start: 0.0,
+    end: 0.3,
+};
+
 const main = async () => {
     const data = await getData();
+    initState(data);
 
     const canvas = document.getElementById('subscribers-chart');
-    const container = document.querySelector('.chart-container');
+    const chartContainer = document.querySelector('.chart-container');
+    const legend = document.querySelector('.chart-legend');
 
+    const legendButtons = makeLegendButtons(data);
+
+    legendButtons.forEach(button => {
+        legend.appendChild(button);
+    });
+
+    // scrolling
     let isDragging = false;
     let lastX = 0;
     let marginLeft = 0;
@@ -24,9 +45,22 @@ const main = async () => {
             const delta = x - lastX;
 
             lastX = x;
-            marginLeft = Math.max(-(container.clientWidth), Math.min(marginLeft + delta, 0));
+            marginLeft = Math.max(-(canvas.width - chartContainer.clientWidth), Math.min(marginLeft + delta, 0));
 
             canvas.style.marginLeft = marginLeft + "px";
+
+            const viewportOffset = Math.abs(marginLeft / canvas.width);
+
+            chartViewConfig = {
+                ...chartViewConfig,
+                viewport: {
+                    start: Math.max(initViewport.start + viewportOffset),
+                    end: Math.max(initViewport.end + viewportOffset),
+                },
+                shouldUpdate: true,
+            };
+            // console.log(chartViewConfig);
+
         }
 
         event.preventDefault();
@@ -36,7 +70,37 @@ const main = async () => {
         isDragging = false;
     });
 
-    draw(canvas, data);
+    // update cycle
+    const update = () => {
+        if (chartViewConfig.shouldUpdate) {
+            canvas.width = calculateCanvasWidth(chartContainer.clientWidth, chartViewConfig.viewport);
+            draw(canvas, data);
+        }
+
+        requestAnimationFrame(update);
+    };
+
+    // start drawing
+    requestAnimationFrame(update);
+};
+
+const initState = (chartData) => {
+    chartViewConfig = {
+        ...chartViewConfig,
+        viewport: {
+            start: 0.0,
+            end: 0.3,
+        },
+        chartDisplayState: chartData.reduce((acc, {label}) => {
+            acc[label] = true;
+            return acc;
+        }, {}),
+    }
+};
+
+const calculateCanvasWidth = (containerWidth, {start, end}) => {
+    // TODO: add zero division protection
+    return containerWidth / (end - start);
 };
 
 const getData = async () => {
@@ -44,40 +108,79 @@ const getData = async () => {
     return Promise.resolve(chartData);
 };
 
+const makeLegendButtons = (chartData) => {
+    return chartData.map(chart => {
+        const checkbox = document.createElement('input');
+        checkbox.type = 'checkbox';
+        checkbox.checked = true;
+
+        checkbox.addEventListener('change', () => {
+            chartViewConfig = {
+                ...chartViewConfig,
+                chartDisplayState: {
+                    ...chartViewConfig.chartDisplayState,
+                    [chart.label]: !chartViewConfig.chartDisplayState[chart.label],
+                },
+                shouldUpdate: true,
+            };
+        });
+
+        return wrapLegendButton(checkbox, chart.label);
+    });
+};
+
+const wrapLegendButton = (checkbox, labelText) => {
+    const wrapper = document.createElement('div');
+    wrapper.classList.add('chart-legend__button');
+
+    const label = document.createElement('label');
+    label.classList.add('chart-legend__label');
+
+    const text = document.createTextNode(labelText);
+
+    label.appendChild(checkbox);
+    label.appendChild(text);
+    wrapper.appendChild(label);
+
+    return wrapper;
+};
+
 const draw = (canvas, chartData) => {
-    console.log('init draw');
-
-    const horizontalLines = 5;
-
     const ctx = canvas.getContext('2d');
     const {width, height} = canvas;
 
+    ctx.clearRect(0, 0, width, height);
+
+    console.log('init draw');
+    const horizontalLines = 5;
     const labelsOffset = 40;
     const chartHeight = height - labelsOffset;
     const chartWidth = width;
 
     // calculations
-    const maxPoint = Math.max(...chartData.map(chart => Math.max(...chart.dataPoints)));
-    console.log(`maxPoint: ${maxPoint}`);
-
+    const displayedCharts = chartData.filter(c => chartViewConfig.chartDisplayState[c.label]);
+    const maxPoint = Math.max(...displayedCharts.map(chart => Math.max(...chart.dataPoints)));
     const dimension = getDimension(maxPoint, horizontalLines);
-    console.log(`dimension: ${dimension}`);
-
     const multiplier = getMultiplier(chartHeight, maxPoint);
-    console.log(`multiplier: ${multiplier}`);
-
     const dates = chartData[0].dates.map(d => new Date(...d));
     const step = width / chartData[0].dataPoints.length;
 
     // drawing
-    drawGrid(ctx, width, height, labelsOffset, dimension, step, dates);
+    drawGrid(ctx, {canvasWidth: width, canvasHeight: height, labelsOffset, dimension, step, dates});
 
     chartData.forEach(chart => {
-        drawChart(ctx, chartWidth, chartHeight, chart, step, multiplier);
+        if (chartViewConfig.chartDisplayState[chart.label]) {
+            drawChart(ctx, {chartWidth, chartHeight, chart, step, multiplier});
+        }
     });
+
+    chartViewConfig = {
+        ...chartViewConfig,
+        shouldUpdate: false,
+    };
 };
 
-const drawGrid = (ctx, canvasWidth, canvasHeight, labelsOffset, dimension, step, dates) => {
+const drawGrid = (ctx, {canvasWidth, canvasHeight, labelsOffset, dimension, step, dates}) => {
     console.log('drawing grid');
 
     // styling
@@ -88,15 +191,17 @@ const drawGrid = (ctx, canvasWidth, canvasHeight, labelsOffset, dimension, step,
 
     const verticalLineStep = Math.floor(canvasHeight / 6);
     const chartHeight = canvasHeight - labelsOffset;
+    const {viewport} = chartViewConfig;
+    const labelsX = canvasWidth * viewport.start;
 
     // drawing
     for (let i = 0; i < 6; i++) {
-        const height = chartHeight - i * verticalLineStep;
+        const height = Math.ceil(chartHeight - i * verticalLineStep);
 
         ctx.beginPath();
         ctx.moveTo(0, height);
         ctx.lineTo(canvasWidth, height);
-        ctx.fillText(dimension * i, 0, height - 6);
+        ctx.fillText(dimension * i, labelsX, height - 6);
         ctx.stroke();
     }
 
@@ -116,7 +221,7 @@ const drawGrid = (ctx, canvasWidth, canvasHeight, labelsOffset, dimension, step,
     }
 };
 
-const drawChart = (ctx, chartWidth, chartHeight, chart, step, multiplier) => {
+const drawChart = (ctx, {chartWidth, chartHeight, chart, step, multiplier}) => {
     console.log('drawing chart');
 
     const {dataPoints, color} = chart;

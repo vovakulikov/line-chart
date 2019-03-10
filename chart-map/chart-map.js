@@ -1,3 +1,4 @@
+import {updateViewConfig} from "../telegram_chart.js";
 
 const chartData = [
     {
@@ -40,7 +41,7 @@ const chartData = [
     },
 ];
 
-const canvas = document.querySelector('canvas');
+const canvas = document.querySelector('.mini-map');
 const { width, height } = canvas;
 const ctx = canvas.getContext('2d');
 const MIN_WIDTH_VIEWPORT = 40;
@@ -97,13 +98,14 @@ drawChart(ctx, {dataset: chartData[1], canvasHeight: height, ratioY, ratioX});
 
 // Это все нужно будет исправить!!!!!
 const slider = document.querySelector('.slider');
-const wrap = document.querySelector('.wrap');
+const wrap = document.querySelector('.mini-map__wrapper');
 const touchContainer = document.querySelector('.map__touch-container');
 let animationTimer;
 
-slider.addEventListener('mousedown', (event) => {
+slider.addEventListener('touchstart', (event) => {
     const wrapCoords = getCoords(wrap);
     const coords = getCoords(event.target);
+    event = event.touches[0];
 
     const startX = coords.left - wrapCoords.left;
     const originEventX = event.pageX;
@@ -117,6 +119,7 @@ slider.addEventListener('mousedown', (event) => {
 
     function move(event) {
         event.stopImmediatePropagation();
+        event = event.touches[0];
 
         const delta = event.pageX - originEventX;
 
@@ -137,25 +140,27 @@ slider.addEventListener('mousedown', (event) => {
         }
 
         slider.style.transform =`translateX(${startX + delta}px)`;
+        updateViewConfig(getTranslateValue(slider.style.transform), slider.clientWidth);
     }
 
     function cleanUp() {
-        document.removeEventListener('mousemove', move);
-        document.removeEventListener('mouseup', cleanUp);
+        document.removeEventListener('touchmove', move);
+        document.removeEventListener('touchend', cleanUp);
 
         touchContainer.classList.remove('map__touch-container__is-visible');
         animationTimer = setTimeout(() => touchContainer.style.transform = ``, 200);
     }
 
-    document.addEventListener('mousemove', move);
-    document.addEventListener('mouseup', cleanUp);
+    document.addEventListener('touchmove', move);
+    document.addEventListener('touchend', cleanUp);
 });
 
 const leftHand = document.querySelector('.left_hand');
 const rightHand = document.querySelector('.right_hand');
 
-rightHand.addEventListener('mousedown', (event) => {
+rightHand.addEventListener('touchstart', (event) => {
     event.stopImmediatePropagation();
+    event = event.touches[0];
 
     const wrapCoords = getCoords(wrap);
     const sliderCoords = getCoords(slider);
@@ -169,6 +174,7 @@ rightHand.addEventListener('mousedown', (event) => {
 
     function changeWidth(event) {
         event.stopImmediatePropagation();
+        event = event.touches[0];
 
         const delta = event.pageX - originEventX;
         const newWidth = originWidth + delta;
@@ -190,22 +196,24 @@ rightHand.addEventListener('mousedown', (event) => {
         }
 
         slider.style.width = `${originWidth + delta}px`;
+        updateViewConfig(getTranslateValue(slider.style.transform), slider.clientWidth);
     }
 
     function cleanUp() {
-        document.removeEventListener('mousemove', changeWidth);
-        document.removeEventListener('mouseup', cleanUp);
+        document.removeEventListener('touchmove', changeWidth);
+        document.removeEventListener('touchend', cleanUp);
 
         touchContainer.classList.remove('map__touch-container__is-visible');
         animationTimer = setTimeout(() => touchContainer.style.transform = ``, 200);
     }
 
-    document.addEventListener('mousemove', changeWidth);
-    document.addEventListener('mouseup', cleanUp);
+    document.addEventListener('touchmove', changeWidth);
+    document.addEventListener('touchend', cleanUp);
 });
 
-leftHand.addEventListener('mousedown', (event) => {
+leftHand.addEventListener('touchstart', (event) => {
     event.stopImmediatePropagation();
+    event = event.touches[0];
 
     const wrapCoords = getCoords(wrap);
     const sliderCoords = getCoords(slider);
@@ -223,6 +231,7 @@ leftHand.addEventListener('mousedown', (event) => {
 
     function changeWidth(event) {
         event.stopImmediatePropagation();
+        event = event.touches[0];
 
         const delta = event.pageX - originEventX;
         const newWidth = originWidth + -1 * delta;
@@ -247,18 +256,19 @@ leftHand.addEventListener('mousedown', (event) => {
 
         slider.style.transform =`translateX(${startX + delta}px)`;
         slider.style.width = `${newWidth}px`;
+        updateViewConfig(getTranslateValue(slider.style.transform), slider.clientWidth);
     }
 
     function cleanUp() {
-        document.removeEventListener('mousemove', changeWidth);
-        document.removeEventListener('mouseup', cleanUp);
+        document.removeEventListener('touchmove', changeWidth);
+        document.removeEventListener('touchend', cleanUp);
 
         touchContainer.classList.remove('map__touch-container__is-visible');
         animationTimer = setTimeout(() => touchContainer.style.transform = ``, 200);
     }
 
-    document.addEventListener('mousemove', changeWidth);
-    document.addEventListener('mouseup', cleanUp);
+    document.addEventListener('touchmove', changeWidth);
+    document.addEventListener('touchend', cleanUp);
 });
 
 function getCoords(elem) {
@@ -271,4 +281,8 @@ function getCoords(elem) {
         width: box.width,
         height: box.height,
     };
+}
+
+function getTranslateValue(transform) {
+    return +transform.replace(/[^\d.]/g, '');
 }

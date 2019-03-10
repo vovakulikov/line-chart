@@ -12,12 +12,30 @@ let chartViewConfig = {
     isNightMode: false,
     shouldUpdate: true,
 };
+const canvas = document.querySelector('.subscribers-chart');
+const chartContainer = document.querySelector('.chart-container');
+
+export const updateViewConfig = (start, width) => {
+    const containerWidth = chartContainer.clientWidth;
+    const viewportStart = start / containerWidth;
+    const viewportWidth = width / containerWidth;
+
+    chartViewConfig = {
+        ...chartViewConfig,
+        viewport: {
+            start: viewportStart,
+            end: Math.min(viewportStart + viewportWidth, 1),
+        },
+        shouldUpdate: true,
+    };
+    scrollToViewport(canvas, containerWidth, chartViewConfig.viewport);
+};
 
 const main = async () => {
     const data = (await getData())[0];
 
-    const canvas = document.querySelector('.subscribers-chart');
-    const chartContainer = document.querySelector('.chart-container');
+    // const canvas = document.querySelector('.subscribers-chart');
+    // const chartContainer = document.querySelector('.chart-container');
     const legend = document.querySelector('.chart-legend');
 
     const legendButtons = makeLegendButtons(data);
@@ -181,7 +199,7 @@ const draw = (canvas, chartData) => {
         .slice(1)
         .map(timestamp => new Date(timestamp));
 
-    const step = width / displayedCharts[0].length;
+    const step = width / (displayedCharts[0].length - 2);
 
     // drawing
     drawGrid(ctx, {canvasWidth: width, canvasHeight: height, labelsOffset, dimension, step, dates});
@@ -231,15 +249,24 @@ const drawGrid = (ctx, {canvasWidth, canvasHeight, labelsOffset, dimension, step
     ctx.lineWidth = settings.grid.xLineWidth;
 
     // x-axis labels
-    let lastLabelEnd = 0;
+    let previousLabelEnd = 0;
 
     for (let i = 0; i < dates.length; i++) {
         const label = formatDate(dates[i]);
         const labelWidth = getLabelWidth(label, settings.grid.fontSize);
-        const x = i === 0 ? 0 : step * i - labelWidth / 2;
+        const margin = settings.grid.marginBetweenLabels;
+        let x;
 
-        if (i === 0 || i ===  dates.length - 1 ||
-            x > lastLabelEnd + settings.grid.marginBetweenLabels) {
+        if (i === 0) {
+            x = 0;
+        } else if (i === dates.length - 1) {
+            x = step * i - labelWidth;
+        } else {
+            x = step * i - labelWidth / 2;
+        }
+
+        if (i === 0 || i === dates.length - 1 ||
+            (x > previousLabelEnd + margin && x < canvasWidth - labelWidth - margin)) {
             ctx.save();
 
             // TODO: remove vertical lines
@@ -251,7 +278,7 @@ const drawGrid = (ctx, {canvasWidth, canvasHeight, labelsOffset, dimension, step
             ctx.fillText(label, x, chartHeight + 20);
             ctx.restore();
 
-            lastLabelEnd = x + labelWidth;
+            previousLabelEnd = x + labelWidth;
         }
     }
 };

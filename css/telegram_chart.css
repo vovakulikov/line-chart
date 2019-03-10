@@ -1,4 +1,5 @@
 @import './destyle.css';
+@import './chart-map.css';
 
 body {
     font-family: sans-serif;
@@ -21,6 +22,7 @@ body {
 }
 
 .chart-legend {
+    margin-top: 16px;
     display: flex;
 }
 

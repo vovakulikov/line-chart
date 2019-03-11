@@ -31,6 +31,9 @@ export const updateViewConfig = (start, width) => {
     scrollToViewport(canvas, containerWidth, chartViewConfig.viewport);
 };
 
+let prevTs;
+let delta;
+
 const main = async () => {
     const data = (await getData())[0];
 
@@ -50,12 +53,17 @@ const main = async () => {
     addScrollingListeners(canvas, chartContainer);
 
     // update cycle
-    const update = () => {
+    const update = (ts) => {
+
+        const _prevTs = prevTs || ts;
+        prevTs = ts;
+        delta = Math.min(100.0, ts - _prevTs);
+
         if (chartViewConfig.shouldUpdate) {
-            canvas.width = calculateCanvasWidth(chartContainer.clientWidth, chartViewConfig.viewport);
-            draw(canvas, data);
+            canvas.width = calculateCanvasWidth(900, chartViewConfig.viewport);
         }
 
+        draw(canvas, data, chartViewConfig.viewport);
         requestAnimationFrame(update);
     };
 
@@ -64,6 +72,7 @@ const main = async () => {
     scrollToViewport(canvas, chartContainer.clientWidth, chartViewConfig.viewport);
 };
 
+let lastOffsetLeft;
 const addScrollingListeners = (canvas, chartContainer) => {
     // scrolling
     let isDragging = false;
@@ -84,7 +93,7 @@ const addScrollingListeners = (canvas, chartContainer) => {
             lastX = x;
             offsetLeft = Math.max(-(canvas.width - chartContainer.clientWidth), Math.min(offsetLeft + delta, 0));
 
-            canvas.style.transform = `translateX(${offsetLeft}px)`;
+            canvas.style.transform = `matrix(1, 0, 0, 1, ${offsetLeft}, 0)`;
 
             const viewportOffset = Math.abs(offsetLeft / canvas.width);
             const viewportWidth = chartViewConfig.viewport.end - chartViewConfig.viewport.start;
@@ -108,8 +117,13 @@ const addScrollingListeners = (canvas, chartContainer) => {
 };
 
 const scrollToViewport = (canvas, containerWidth, {start, end}) => {
-    canvas.width = calculateCanvasWidth(containerWidth, {start, end});
-    canvas.style.transform = `translateX(${getViewportX(canvas.width, start)}px)`;
+    const newWidth = calculateCanvasWidth(containerWidth, {start, end});
+
+    if (newWidth !=  canvas.width) {
+        canvas.width = newWidth;
+    }
+
+    canvas.style.transform = `matrix(1, 0, 0, 1, ${getViewportX(canvas.width, start)}, 0)`;
 };
 
 const initState = (chartData) => {
@@ -174,9 +188,12 @@ const wrapLegendButton = (checkbox, labelText, color) => {
     return button;
 };
 
-const draw = (canvas, chartData) => {
+let lastMultiplier = 0;
+
+const draw = (canvas, chartData, viewport) => {
     const ctx = canvas.getContext('2d');
     const {width, height} = canvas;
+    const { start, end } = viewport;
 
     ctx.clearRect(0, 0, width, height);
 
@@ -186,20 +203,39 @@ const draw = (canvas, chartData) => {
     const chartWidth = width;
     const xColumn = settings.data.xColumn;
 
-    // calculations
-    const displayedCharts = chartData.columns.filter(c => c[0] !== xColumn && chartViewConfig.chartDisplayState[c[0]]);
-
-    const maxPoint = Math.max(...displayedCharts.map(points => Math.max(...points.slice(1))));
-
-    const dimension = getDimension(maxPoint, horizontalLines);
-    const multiplier = getMultiplier(chartHeight, maxPoint);
-
     const dates = chartData.columns
         .find(c => c[0] === xColumn)
         .slice(1)
         .map(timestamp => new Date(timestamp));
 
+
+
+    // calculations
+    const displayedCharts = chartData.columns.filter(c => c[0] !== xColumn && chartViewConfig.chartDisplayState[c[0]]);
+    console.log(displayedCharts[0]);
+
     const step = width / (displayedCharts[0].length - 2);
+    const diff = (dates[dates.length - 1] - dates[0]);
+    const startDate = +dates[0] + Math.round(start * diff);
+    const dueDate = +dates[0] + Math.round(end * diff);
+
+    console.log(end, diff, new Date(+startDate), new Date(+dueDate));
+
+    const maxPoint = Math.max(
+        ...displayedCharts
+            .map(points => Math.max(
+                ...points.slice(1)
+                    .filter((el, index) => dates[index] >= new Date(startDate) && dates[index] <= new Date(dueDate))
+                )
+            )
+    );
+
+    const dimension = getDimension(maxPoint, horizontalLines);
+    const multiplier = getMultiplier(chartHeight, maxPoint);
+
+    const p = 0.008 * delta;
+    lastMultiplier += p * (multiplier - lastMultiplier);
+
 
     // drawing
     drawGrid(ctx, {canvasWidth: width, canvasHeight: height, labelsOffset, dimension, step, dates});
@@ -208,7 +244,7 @@ const draw = (canvas, chartData) => {
         const columnId = chart[0];
 
         if (chartViewConfig.chartDisplayState[columnId]) {
-            drawChart(ctx, {chartWidth, chartHeight, dataPoints: chart.slice(1), step, multiplier, color: chartData.colors[columnId]});
+            drawChart(ctx, {chartWidth, chartHeight, dataPoints: chart.slice(1), step, multiplier: lastMultiplier, color: chartData.colors[columnId]});
         }
     });
 

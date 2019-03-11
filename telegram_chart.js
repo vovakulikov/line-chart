@@ -37,7 +37,7 @@ const animation = {
 };
 
 const main = async () => {
-    const data = (await getData())[0];
+    const data = (await getData())[4];
     const legend = document.querySelector('.chart-legend');
 
     const legendButtons = makeLegendButtons(data);
@@ -218,7 +218,8 @@ const draw = (canvas, chartData, animate) => {
             zoomRatio: chartViewConfig.zoomRatio + animation.animationStep,
         };
 
-        if (Math.abs(chartViewConfig.zoomRatio - animation.valueToReach) < 0.03) {
+        if (animation.animationStep > 0 && chartViewConfig.zoomRatio > animation.valueToReach ||
+            animation.animationStep < 0 && chartViewConfig.zoomRatio < animation.valueToReach) {
             chartViewConfig = {
                 ...chartViewConfig,
                 shouldAnimate: false,

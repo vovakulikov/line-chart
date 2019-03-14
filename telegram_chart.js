@@ -252,6 +252,7 @@ const draw = (canvas, chartData, viewport) => {
     };
 };
 
+// TODO Delete this and use just simple map
 class LabelsSet {
     constructor() {
        this.entities = {};

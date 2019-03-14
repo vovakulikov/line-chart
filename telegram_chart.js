@@ -1,5 +1,5 @@
 import {chartData} from './chart_data.js';
-import {formatDate, getDimension, getLabelWidth, getZoomRatio, getViewportX, calculateCanvasWidth, scrollToViewport} from './helpers.js';
+import {formatDate, getDimension, getLabelWidth, getZoomRatio, getViewportX, calculateCanvasWidth} from './helpers.js';
 import settings from "./settings.js";
 
 // TODO: turn into a store and update with reducers
@@ -365,4 +365,4 @@ const getData = async () => {
     return Promise.resolve(chartData);
 };
 
-window.onload = main;
+// window.onload = main;

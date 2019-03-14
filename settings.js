@@ -14,8 +14,13 @@ export default {
         strokeStyle: 'rgba(0, 0, 0, 0.16)',
         fillStyle: 'rgba(0, 0, 0, 0.4)',
         marginBetweenLabels: 40,
+        labelsOffset: 40,
+        horizontalLines: 5,
     },
     chart: {
         lineWidth: 1.0,
+    },
+    minimap: {
+        minWidth: 40,
     }
 }

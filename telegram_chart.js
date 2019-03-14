@@ -223,6 +223,15 @@ const draw = (canvas, chartData, viewport) => {
                 )
             )
     );
+
+    let minPoint = Math.min(
+        ...displayedCharts
+            .map(points => Math.min(
+                ...points.slice(1)
+                    .filter((el, index) => dates[index] >= new Date(startDate) && dates[index] <= new Date(dueDate))
+                )
+            )
+    );
     const multiplier = getMultiplier(chartHeight, maxPoint);
 
     if (!lastMultiplier) {
@@ -236,6 +245,7 @@ const draw = (canvas, chartData, viewport) => {
     // drawing
     drawGrid(ctx, {
         maxY: maxPoint,
+        minY: minPoint,
         canvasWidth: width,
         canvasHeight: height,
         labelsOffset,
@@ -259,6 +269,24 @@ const draw = (canvas, chartData, viewport) => {
     };
 };
 
+class LabelsSet {
+    constructor() {
+       this.entities = {};
+    }
+
+    add(entity) {
+        if (!this.entities[entity.value]) {
+            this.entities[entity.value] = entity;
+        }
+    }
+
+    delete = (entity) => delete this.entities[entity.value];
+    getValues = () => Object.values(this.entities);
+    getKeys = () => Object.keys(this.entities);
+}
+
+const labels = new LabelsSet();
+
 const drawGrid = (ctx, {
         canvasWidth,
         canvasHeight,
@@ -267,6 +295,7 @@ const drawGrid = (ctx, {
         dates,
         multiplier,
         maxY,
+        minY,
         finalMultiplier,
     }) => {
     // styling
@@ -281,20 +310,53 @@ const drawGrid = (ctx, {
     const horizontalLines = 5;
     const newMaxY = (chartHeight - 40) / finalMultiplier;
     const dimension = getDimension(newMaxY, horizontalLines);
-    const YLabels = new Array(6).fill().map((el, index) => dimension * index);
+    const newLabels = new Array(6).fill().map((el, index) => ({
+        targetOpacity: 1,
+        opacity: 0,
+        strokeOpacity: 0,
+        targetStrokeOpacity: 1,
+        value: dimension * index
+    }));
+
+    const p = 0.009 * delta;
+    const ps = 0.007 * delta;
+
+    labels.getValues().forEach((label) => {
+        label.targetOpacity = 0;
+        label.targetStrokeOpacity = 0;
+
+        return label;
+    });
+
+    newLabels
+        .forEach((label) => {
+            if (labels.entities[label.value]) {
+                labels.entities[label.value].targetOpacity = 1;
+                labels.entities[label.value].targetStrokeOpacity = 1;
+            } else {
+                labels.add(label);
+            }
+    });
 
     // drawing
     // y-axis labels
 
-    YLabels.forEach((element, index) => {
-        const height = chartHeight - Math.floor(multiplier * element);
+    labels.getValues().forEach((label) => {
+        const height = chartHeight - Math.floor(multiplier * label.value);
+
+        const diff = label.targetOpacity - label.opacity;
+        const strokeDiff = label.targetStrokeOpacity - label.strokeOpacity;
+        label.opacity +=  p * diff;
+        label.strokeOpacity +=  ps * strokeDiff;
 
         ctx.save();
 
         ctx.beginPath();
         ctx.moveTo(0, height);
         ctx.lineTo(canvasWidth, height);
-        ctx.fillText(Math.round(element).toString(), labelsX, height - 6);
+        ctx.fillStyle = `rgba(0,0,0, ${label.opacity})`;
+        ctx.strokeStyle = `rgba(0, 0, 0, ${label.strokeOpacity})`;
+        ctx.fillText(Math.round(label.value).toString(), labelsX, height - 6);
         ctx.stroke();
 
         ctx.restore();

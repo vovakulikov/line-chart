@@ -5,7 +5,7 @@ export const getDimension = (maxPoint, horizontalLines) => {
     return step;
 };
 
-export const getMultiplier = (chartHeight, maxPoint) => {
+export const getZoomRatio = (chartHeight, maxPoint) => {
     return chartHeight / maxPoint;
 };
 
@@ -23,5 +23,14 @@ export const formatDate = (date) => {
     const month_names_short = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 
     return `${month_names_short[date.getMonth()]} ${date.getDate()}`;
+};
+
+export const calculateCanvasWidth = (containerWidth, {start, end}) => {
+    return containerWidth / (end - start);
+};
+
+export const scrollToViewport = (canvas, containerWidth, {start, end}) => {
+    canvas.width = calculateCanvasWidth(containerWidth, {start, end});
+    canvas.style.transform = `translateX(${getViewportX(canvas.width, start)}px)`;
 };
 

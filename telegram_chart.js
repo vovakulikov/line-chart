@@ -1,5 +1,5 @@
 import {chartData} from './chart_data.js';
-import {formatDate, getDimension, getLabelWidth, getMultiplier, getViewportX} from './helpers.js';
+import {formatDate, getDimension, getLabelWidth, getZoomRatio, getViewportX, calculateCanvasWidth, scrollToViewport} from './helpers.js';
 import settings from "./settings.js";
 
 // TODO: turn into a store and update with reducers
@@ -8,13 +8,68 @@ let chartViewConfig = {
         start: 0.0,
         end: 0.0,
     },
-    chartDisplayState: {},
+    chartDisplayState: {
+        y0: {
+            display: true,
+            opacity: 1.0,
+            isFading: false,
+            isReappearing: false,
+        },
+        y1: {
+            display: true,
+            opacity: 1.0,
+            isFading: false,
+            isReappearing: false,
+        }
+    },
+    zoomRatio: 1,
     isNightMode: false,
     shouldUpdate: true,
+    shouldAnimate: false,
 };
 const canvas = document.querySelector('.subscribers-chart');
 const chartContainer = document.querySelector('.chart-container');
 
+let prevTs;
+let delta;
+
+const main = async () => {
+    const data = (await getData())[0];
+    const legend = document.querySelector('.chart-legend');
+
+    const legendButtons = makeLegendButtons(data);
+
+    legendButtons.forEach(button => {
+        legend.appendChild(button);
+    });
+
+    initState(data);
+    canvas.width = calculateCanvasWidth(chartContainer.clientWidth, chartViewConfig.viewport);
+
+    addScrollingListeners(canvas, chartContainer);
+
+    // update cycle
+    const update = (ts) => {
+        requestAnimationFrame(update);
+
+        const _prevTs = prevTs || ts;
+        prevTs = ts;
+        delta = Math.min(100.0, ts - _prevTs);
+
+        if (chartViewConfig.shouldUpdate) {
+            canvas.width = calculateCanvasWidth(900, chartViewConfig.viewport);
+        }
+
+        draw(canvas, data, chartViewConfig.viewport);
+    };
+
+    // start drawing
+    requestAnimationFrame(update);
+    scrollToViewport(canvas, chartContainer.clientWidth, chartViewConfig.viewport);
+};
+
+let lastOffsetLeft;
+// reducer
 export const updateViewConfig = (start, width) => {
     const containerWidth = chartContainer.clientWidth;
     const viewportStart = start / containerWidth;
@@ -31,48 +86,6 @@ export const updateViewConfig = (start, width) => {
     scrollToViewport(canvas, containerWidth, chartViewConfig.viewport);
 };
 
-let prevTs;
-let delta;
-
-const main = async () => {
-    const data = (await getData())[0];
-
-    // const canvas = document.querySelector('.subscribers-chart');
-    // const chartContainer = document.querySelector('.chart-container');
-    const legend = document.querySelector('.chart-legend');
-
-    const legendButtons = makeLegendButtons(data);
-
-    legendButtons.forEach(button => {
-        legend.appendChild(button);
-    });
-
-    initState(data);
-    canvas.width = calculateCanvasWidth(chartContainer.clientWidth, chartViewConfig.viewport);
-
-    addScrollingListeners(canvas, chartContainer);
-
-    // update cycle
-    const update = (ts) => {
-
-        const _prevTs = prevTs || ts;
-        prevTs = ts;
-        delta = Math.min(100.0, ts - _prevTs);
-
-        if (chartViewConfig.shouldUpdate) {
-            canvas.width = calculateCanvasWidth(900, chartViewConfig.viewport);
-        }
-
-        draw(canvas, data, chartViewConfig.viewport);
-        requestAnimationFrame(update);
-    };
-
-    // start drawing
-    requestAnimationFrame(update);
-    scrollToViewport(canvas, chartContainer.clientWidth, chartViewConfig.viewport);
-};
-
-let lastOffsetLeft;
 const addScrollingListeners = (canvas, chartContainer) => {
     // scrolling
     let isDragging = false;
@@ -116,37 +129,6 @@ const addScrollingListeners = (canvas, chartContainer) => {
     });
 };
 
-const scrollToViewport = (canvas, containerWidth, {start, end}) => {
-    const newWidth = calculateCanvasWidth(containerWidth, {start, end});
-
-    if (newWidth !=  canvas.width) {
-        canvas.width = newWidth;
-    }
-
-    canvas.style.transform = `matrix(1, 0, 0, 1, ${getViewportX(canvas.width, start)}, 0)`;
-};
-
-const initState = (chartData) => {
-    chartViewConfig = {
-        ...chartViewConfig,
-        viewport: settings.initViewport,
-        chartDisplayState: Object.keys(chartData.names).reduce((acc, id) => {
-            acc[id] = true;
-            return acc;
-        }, {}),
-    };
-};
-
-const calculateCanvasWidth = (containerWidth, {start, end}) => {
-    // TODO: add zero division protection
-    return containerWidth / (end - start);
-};
-
-const getData = async () => {
-    // replace with a call to actual API
-    return Promise.resolve(chartData);
-};
-
 const makeLegendButtons = (chartData) => {
     return Object.entries(chartData.names).map(([id, label]) => {
         const checkbox = document.createElement('input');
@@ -160,6 +142,7 @@ const makeLegendButtons = (chartData) => {
                     ...chartViewConfig.chartDisplayState,
                     [id]: !chartViewConfig.chartDisplayState[id],
                 },
+                shouldAnimate: true,
                 shouldUpdate: true,
             };
         });
@@ -232,7 +215,7 @@ const draw = (canvas, chartData, viewport) => {
                 )
             )
     );
-    const multiplier = getMultiplier(chartHeight, maxPoint);
+    const multiplier = getZoomRatio(chartHeight, maxPoint);
 
     if (!lastMultiplier) {
         lastMultiplier = multiplier
@@ -259,7 +242,7 @@ const draw = (canvas, chartData, viewport) => {
         const columnId = chart[0];
 
         if (chartViewConfig.chartDisplayState[columnId]) {
-            drawChart(ctx, {chartWidth, chartHeight, dataPoints: chart.slice(1), step, multiplier: lastMultiplier, color: chartData.colors[columnId]});
+            drawChart(ctx, {chartWidth, chartHeight, dataPoints: chart.slice(1), step, zoomRatio: lastMultiplier, color: chartData.colors[columnId]});
         }
     });
 
@@ -397,12 +380,12 @@ const drawGrid = (ctx, {
     }
 };
 
-const drawChart = (ctx, {chartWidth, chartHeight, dataPoints, step, multiplier, color}) => {
+const drawChart = (ctx, {chartWidth, chartHeight, dataPoints, step, zoomRatio, color}) => {
     // styling
     ctx.lineWidth = settings.chart.lineWidth;
 
     let curX = 0;
-    let curY = chartHeight - dataPoints[0] * multiplier;
+    let curY = chartHeight - dataPoints[0] * zoomRatio;
 
     // drawing
     ctx.save();
@@ -412,12 +395,33 @@ const drawChart = (ctx, {chartWidth, chartHeight, dataPoints, step, multiplier, 
 
     for (let i = 1; i < dataPoints.length; i++) {
         curX += step;
-        curY = chartHeight - dataPoints[i] * multiplier;
+        curY = chartHeight - dataPoints[i] * zoomRatio;
         ctx.lineTo(curX, curY);
     }
 
     ctx.stroke();
     ctx.restore();
+};
+
+const initState = (chartData) => {
+    chartViewConfig = {
+        ...chartViewConfig,
+        viewport: settings.initViewport,
+        chartDisplayState: Object.keys(chartData.names).reduce((acc, id) => {
+            acc[id] = {
+                display: true,
+                opacity: 1.0,
+                isFading: false,
+                isReappearing: false,
+            };
+            return acc;
+        }, {}),
+    };
+};
+
+const getData = async () => {
+    // replace with a call to actual API
+    return Promise.resolve(chartData);
 };
 
 window.onload = main;

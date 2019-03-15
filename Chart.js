@@ -5,7 +5,7 @@ import {
 import settings from "./settings.js";
 
 export class Chart {
-    constructor(canvas, chartContainer, legend, data) {
+    constructor(canvas, chartContainer, legend, data, viewport$, displayedCharts$) {
         this.canvas = canvas;
         this.chartContainer = chartContainer;
         this.legend = legend;
@@ -13,23 +13,31 @@ export class Chart {
         this.dates = data.columns.find(c => c[0] === 'x').slice(1);
         this.shouldUpdate = true;
         this.viewConfig = {
-            viewport: {
-                start: 0.7,
-                end: 1.0,
-            },
             labels: new Map(),
             zoomRatio: 1.0,
             isNightMode: false,
             isAnimating: false,
             animationConfig: {
-                duration: 200, // ms
-                animationStep: null, // шаг изменения zoomRatio на каждый тик
-                zoomRatioToReach: 1.0, // до какого зума перерисовываем
                 prevTs: null,
                 delta: null,
-                transformFn: x => x,
             },
         };
+        this.viewport$ = viewport$;
+        this.displayedCharts$ = displayedCharts$;
+        this.offsetLeft = getViewportX(this.canvas.width, this.viewport.start);
+
+        this.viewport$.subscribe(() => {
+            this.scrollToViewport();
+            this.shouldUpdate = true;
+        });
+
+        this.displayedCharts$.subscribe(displayed => {
+            Object.values(this.charts).forEach(chart => {
+                chart.displayState.isDisplayed = displayed.has(chart.id);
+            });
+
+            this.shouldUpdate = true;
+        });
 
         this.update = this.update.bind(this);
 
@@ -38,13 +46,17 @@ export class Chart {
         this.viewConfig.zoomRatio = getZoomRatio(this.chartHeight, maxPoint);
     }
 
+    get viewport() {
+        return this.viewport$.value;
+    }
+
     get chartHeight() {
         return this.canvas.height - settings.grid.labelsOffset;
     }
 
     init() {
         requestAnimationFrame(this.update);
-        this.canvas.width = calculateCanvasWidth(this.chartContainer.clientWidth, this.viewConfig.viewport);
+        this.canvas.width = calculateCanvasWidth(this.chartContainer.clientWidth, this.viewport);
         this.addScrollingListeners();
         this.scrollToViewport();
 
@@ -63,7 +75,7 @@ export class Chart {
         this.viewConfig.animationConfig.delta = Math.min(100.0, ts - _prevTs);
 
         if (this.shouldUpdate) {
-            this.canvas.width = calculateCanvasWidth(this.chartContainer.clientWidth, this.viewConfig.viewport);
+            this.canvas.width = calculateCanvasWidth(this.chartContainer.clientWidth, this.viewport);
             this.draw();
         }
 
@@ -75,8 +87,8 @@ export class Chart {
         ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
 
         const datesSpan = (this.dates[this.dates.length - 1] - this.dates[0]);
-        const startDate = +this.dates[0] + Math.round(this.viewConfig.viewport.start * datesSpan);
-        const dueDate = +this.dates[0] + Math.round(this.viewConfig.viewport.end * datesSpan);
+        const startDate = +this.dates[0] + Math.round(this.viewport.start * datesSpan);
+        const dueDate = +this.dates[0] + Math.round(this.viewport.end * datesSpan);
 
         const displayedCharts = Object.values(this.charts)
             .filter(chart => chart.displayState.isDisplayed)
@@ -86,14 +98,6 @@ export class Chart {
         let maxPoint = Math.max(
             ...displayedCharts
                 .map(points => Math.max(
-                    ...points
-                        .filter((_, index) => isInRange(this.dates[index], startDate, dueDate)))
-                )
-        );
-
-        let minPoint = Math.min(
-            ...displayedCharts
-                .map(points => Math.min(
                     ...points
                         .filter((_, index) => isInRange(this.dates[index], startDate, dueDate)))
                 )
@@ -111,12 +115,11 @@ export class Chart {
             if (this.charts[id].displayState.isDisplayed) {
                 this.drawChart(ctx, id);
             }
-        })
+        });
     }
 
     drawGrid(ctx, lastZoomRatio) {
         const canvasWidth = this.canvas.width;
-        const canvasHeight = this.canvas.height;
         const step = canvasWidth / (this.dates.length - 1);
 
         // styling
@@ -125,8 +128,7 @@ export class Chart {
         ctx.font = `${settings.grid.fontSize}px ${settings.grid.font}`;
         ctx.fillStyle = settings.grid.fillStyle;
 
-        const {viewport} = this.viewConfig;
-        const labelsX = canvasWidth * viewport.start;
+        const labelsX = canvasWidth * this.viewport.start;
 
         const newMaxY = (this.chartHeight - settings.grid.labelsOffset) / lastZoomRatio;
         const dimension = getDimension(newMaxY, settings.grid.sections - 1);
@@ -208,7 +210,6 @@ export class Chart {
                 (x > previousLabelEnd + margin && x < canvasWidth - labelWidth - margin)) {
                 ctx.save();
 
-                // TODO: remove vertical lines
                 ctx.beginPath();
                 ctx.moveTo(step * i, this.chartHeight);
                 ctx.stroke();
@@ -248,33 +249,18 @@ export class Chart {
         ctx.restore();
     }
 
-    updateViewport(start, width) {
-        const containerWidth = this.chartContainer.clientWidth;
-        const viewportStart = start / containerWidth;
-        const viewportWidth = width / containerWidth;
-        const viewport = this.viewConfig.viewport;
-
-        viewport.start = viewportStart;
-        viewport.end = Math.min(viewportStart + viewportWidth, 1);
-
-        this.shouldUpdate = true;
-
-        this.scrollToViewport();
-    }
-
     scrollToViewport() {
-        const viewport = this.viewConfig.viewport;
-        const {start, end} = viewport;
+        const {start, end} = this.viewport;
 
         this.canvas.width = calculateCanvasWidth(this.chartContainer.clientWidth, {start, end});
-        this.canvas.style.transform = `translateX(${getViewportX(this.canvas.width, start)}px)`;
+        this.offsetLeft = getViewportX(this.canvas.width, start);
+        this.canvas.style.transform = `matrix(1, 0, 0, 1, ${this.offsetLeft}, 0)`;
     }
 
     addScrollingListeners() {
         // scrolling
         let isDragging = false;
         let lastX = 0;
-        let offsetLeft = getViewportX(this.canvas.width, this.viewConfig.viewport.start);
 
         this.canvas.addEventListener('touchstart', event => {
             isDragging = true;
@@ -288,15 +274,20 @@ export class Chart {
                 const delta = x - lastX;
 
                 lastX = x;
-                offsetLeft = Math.max(-(this.canvas.width - this.chartContainer.clientWidth), Math.min(offsetLeft + delta, 0));
+                this.offsetLeft = Math.max(
+                    -(this.canvas.width - this.chartContainer.clientWidth),
+                    Math.min(this.offsetLeft + delta, 0)
+                );
 
-                this.canvas.style.transform = `matrix(1, 0, 0, 1, ${offsetLeft}, 0)`;
+                this.canvas.style.transform = `matrix(1, 0, 0, 1, ${this.offsetLeft}, 0)`;
 
-                const viewportOffset = Math.abs(offsetLeft / this.canvas.width);
-                const viewportWidth = this.viewConfig.viewport.end - this.viewConfig.viewport.start;
+                const viewportOffset = Math.abs(this.offsetLeft / this.canvas.width);
+                const viewportWidth = this.viewport.end - this.viewport.start;
 
-                this.viewConfig.viewport.start = viewportOffset;
-                this.viewConfig.viewport.end = Math.min(viewportOffset + viewportWidth, 1);
+                const start = viewportOffset;
+                const end = Math.min(viewportOffset + viewportWidth, 1);
+
+                this.viewport$.addEvent({start, end});
                 this.shouldUpdate = true;
             }
 
@@ -318,6 +309,12 @@ export class Chart {
                 const chart = this.charts[id];
 
                 chart.displayState.isDisplayed = !chart.displayState.isDisplayed;
+
+                const displayedChartsIds = Object.values(this.charts)
+                    .filter(chart => chart.displayState.isDisplayed)
+                    .map(({id}) => id);
+
+                this.displayedCharts$.addEvent(new Set(displayedChartsIds));
                 this.viewConfig.isAnimating = true;
                 this.shouldUpdate = true;
             });

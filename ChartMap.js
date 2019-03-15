@@ -1,80 +1,48 @@
 import settings from "./settings.js";
-import {getCoords, getTranslateValue} from './helpers.js';
+import {getCoords, getTranslateValue, prepareMinimapData, updateViewport} from './helpers.js';
 
 export class ChartMap {
-    constructor(canvas, updateViewport) {
-        this.updateViewport = updateViewport;
+    constructor(canvas, data, viewport$, displayedCharts$) {
         this.canvas = canvas;
-        this.chartData = [
-            {
-                points: [
-                    { x: 10, y: 10 },
-                    { x: 12, y: 15 },
-                    { x: 14, y: 43 },
-                    { x: 20, y: 43 },
-                    { x: 24, y: 66 },
-                    { x: 26, y: 100 },
-                    { x: 30, y: 66 },
-                    { x: 33, y: 93 },
-                    { x: 36, y: 75 },
-                    { x: 38, y: 88 },
-                    { x: 40, y: 28 },
-                    { x: 42, y: 36 },
-                    { x: 44, y: 44 },
-                    { x: 46, y: 56 },
-                    { x: 48, y: 88 },
-                ],
-                color: 'green',
-            },
-            {
-                points: [
-                    { x: 10, y: 88 },
-                    { x: 12, y: 77 },
-                    { x: 14, y: 45 },
-                    { x: 20, y: 33 },
-                    { x: 24, y: 67 },
-                    { x: 26, y: 22 },
-                    { x: 30, y: 56 },
-                    { x: 33, y: 76 },
-                    { x: 36, y: 55 },
-                    { x: 39, y: 34 },
-                    { x: 42, y: 89 },
-                    { x: 45, y: 80 },
-                    { x: 48, y: 50 },
-                ],
-                color: 'red',
-            },
-        ];
-        this.processCb = this.processCb.bind(this);
+        this.chartData = prepareMinimapData(data);
+        this.zoomRatio = 1.0;
+        this.slider = document.querySelector('.slider');
+        this.viewport$ = viewport$;
+        this.displayedCharts$ = displayedCharts$;
+
+        this.viewport$.subscribe(() => {
+            this.scrollToViewport();
+        });
+
+        this.displayedCharts$.subscribe(displayed => {
+            this.chartData.forEach(chart => {
+                chart.isDisplayed = displayed.has(chart.id);
+            });
+            this.update();
+        });
     }
 
-    processCb(...args) {
-        this.updateViewport(...args);
+    get viewport() {
+        return this.viewport$.value;
+    }
+
+    get chartHeight() {
+        return this.canvas.height;
+    }
+
+    get chartWidth() {
+        return this.canvas.width;
     }
 
     init() {
-        const ctx = this.canvas.getContext('2d');
-        const { width, height } = this.canvas;
-        const maxX = this.getMax((point) => point.x);
-        const minX = this.getMin((point) => point.x);
-        const maxY = this.getMax((point) => point.y);
-        const minY = this.getMin((point) => point.y);
-
-        console.log(minX, maxX, minY, maxY);
-
-        const ratioY = height / maxY;
-        const ratioX = width / (maxX - minX);
-
-        this.drawChart(ctx, {dataset: this.chartData[0], canvasHeight: height, ratioY, ratioX});
-        this.drawChart(ctx, {dataset: this.chartData[1], canvasHeight: height, ratioY, ratioX});
+        this.update();
 
         // Это все нужно будет исправить!!!!!
-        const slider = document.querySelector('.slider');
         const wrap = document.querySelector('.mini-map__wrapper');
         const touchContainer = document.querySelector('.map__touch-container');
         let animationTimer;
 
-        slider.addEventListener('touchstart', (event) => {
+        this.slider.addEventListener('touchstart', (event) => {
             const wrapCoords = getCoords(wrap);
             const coords = getCoords(event.target);
             event = event.touches[0];
@@ -102,19 +70,23 @@ export class ChartMap {
                 }
 
                 if ((event.pageX - leftShift) < wrapCoords.left) {
-                    slider.style.transform =`translateX(${0}px)`;
+                    that.slider.style.transform =`translateX(${0}px)`;
 
                     return;
                 }
 
                 if ((event.pageX + rightShift) > wrapCoords.right ){
-                    slider.style.transform =`translateX(${wrapCoords.width - coords.width}px)`;
+                    that.slider.style.transform =`translateX(${wrapCoords.width - coords.width}px)`;
 
                     return;
                 }
 
-                slider.style.transform =`translateX(${startX + delta}px)`;
-                that.processCb(getTranslateValue(slider.style.transform), slider.clientWidth);
+                that.slider.style.transform =`translateX(${startX + delta}px)`;
+
+                const start = getTranslateValue(that.slider.style.transform);
+                const end = start + that.slider.clientWidth;
+
+                that.viewport$.addEvent(updateViewport(start, end, that.chartWidth));
             }
 
             function cleanUp() {
@@ -137,10 +109,10 @@ export class ChartMap {
             event = event.touches[0];
 
             const wrapCoords = getCoords(wrap);
-            const sliderCoords = getCoords(slider);
+            const sliderCoords = getCoords(this.slider);
             const originEventX = event.pageX;
             const originEventY = event.pageY - wrapCoords.top;
-            const originWidth = slider.clientWidth;
+            const originWidth = this.slider.clientWidth;
 
             touchContainer.style.transform = `translate(${originEventX - wrapCoords.left}px, ${originEventY}px)`;
             touchContainer.classList.add('map__touch-container__is-visible');
@@ -156,7 +128,7 @@ export class ChartMap {
                 const newWidth = originWidth + delta;
 
                 if (newWidth < settings.minimap.minWidth) {
-                    slider.style.width = `${settings.minimap.minWidth}px`;
+                    that.slider.style.width = `${settings.minimap.minWidth}px`;
 
                     return;
                 }
@@ -166,13 +138,17 @@ export class ChartMap {
                 }
 
                 if ((newWidth + (sliderCoords.left - wrapCoords.left)) >= (wrapCoords.right - wrapCoords.left)) {
-                    slider.style.width = `${wrapCoords.right - sliderCoords.left}px`;
+                    that.slider.style.width = `${wrapCoords.right - sliderCoords.left}px`;
 
                     return;
                 }
 
-                slider.style.width = `${originWidth + delta}px`;
-                that.processCb(getTranslateValue(slider.style.transform), slider.clientWidth);
+                that.slider.style.width = `${originWidth + delta}px`;
+
+                const start = getTranslateValue(that.slider.style.transform);
+                const end = start + that.slider.clientWidth;
+
+                that.viewport$.addEvent(updateViewport(start, end, that.chartWidth));
             }
 
             function cleanUp() {
@@ -192,12 +168,12 @@ export class ChartMap {
             event = event.touches[0];
 
             const wrapCoords = getCoords(wrap);
-            const sliderCoords = getCoords(slider);
+            const sliderCoords = getCoords(this.slider);
 
             const startX = sliderCoords.left - wrapCoords.left;
             const originEventX = event.pageX;
             const originEventY = event.pageY - wrapCoords.top;
-            const originWidth = slider.clientWidth;
+            const originWidth = this.slider.clientWidth;
             const leftShiftX = event.pageX - sliderCoords.left;
 
             touchContainer.style.transform = `translate(${originEventX - wrapCoords.left}px, ${originEventY}px)`;
@@ -214,8 +190,8 @@ export class ChartMap {
                 const newWidth = originWidth + -1 * delta;
 
                 if (newWidth < settings.minimap.minWidth) {
-                    slider.style.width = `${settings.minimap.minWidth}px`;
-                    slider.style.transform =`translateX(${sliderCoords.right - wrapCoords.left - settings.minimap.minWidth}px)`;
+                    that.slider.style.width = `${settings.minimap.minWidth}px`;
+                    that.slider.style.transform =`translateX(${sliderCoords.right - wrapCoords.left - settings.minimap.minWidth}px)`;
 
                     return;
                 }
@@ -225,15 +201,19 @@ export class ChartMap {
                 }
 
                 if ((event.pageX - leftShiftX) <= wrapCoords.left) {
-                    slider.style.width = `${sliderCoords.right - wrapCoords.left}px`;
-                    slider.style.transform =`translateX(0px)`;
+                    that.slider.style.width = `${sliderCoords.right - wrapCoords.left}px`;
+                    that.slider.style.transform =`translateX(0px)`;
 
                     return;
                 }
 
-                slider.style.transform =`translateX(${startX + delta}px)`;
-                slider.style.width = `${newWidth}px`;
-                that.processCb(getTranslateValue(slider.style.transform), slider.clientWidth);
+                that.slider.style.transform =`translateX(${startX + delta}px)`;
+                that.slider.style.width = `${newWidth}px`;
+
+                const start = getTranslateValue(that.slider.style.transform);
+                const end = start + that.slider.clientWidth;
+
+                that.viewport$.addEvent(updateViewport(start, end, that.chartWidth));
             }
 
             function cleanUp() {
@@ -249,17 +229,34 @@ export class ChartMap {
         });
     }
 
-    drawChart(ctx, { canvasHeight, ratioY, ratioX, dataset }) {
-        const { points, color } = dataset;
+    update() {
+        const ctx = this.canvas.getContext('2d');
+
+        ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
+
+        const maxPoint = Math.max(...this.chartData.map(chart => Math.max(...chart.dataPoints)));
+
+        this.zoomRatio = (this.chartHeight - settings.minimap.offsetTop) / maxPoint;
+
+        const displayedCharts = this.chartData.filter(chart => chart.isDisplayed);
+
+        displayedCharts.forEach(chart => {
+            this.drawChart(ctx, {dataset: chart});
+        });
+    }
+
+    drawChart(ctx, { dataset }) {
+        const { dataPoints, color } = dataset;
+        const step = this.chartWidth / dataPoints.length;
 
         ctx.save();
         ctx.lineWidth = 2;
         ctx.beginPath();
         ctx.strokeStyle = color;
 
-        for (let i = 0; i < points.length; i++) {
-            const y = this.canvas.height - points[i].y * ratioY;
-            const x = points[i].x * ratioX - this.getMin((point) => point.x) * ratioX;
+        for (let i = 0; i < dataPoints.length; i++) {
+            const y = this.chartHeight - dataPoints[i] * this.zoomRatio;
+            const x = step * i;
 
             ctx.lineTo(x, y);
         }
@@ -268,18 +265,7 @@ export class ChartMap {
         ctx.restore();
     }
 
-
-    getMax(getProp) {
-        return Math.max(
-            ...this.chartData
-                .map(chart => Math.max(...chart.points.map(getProp)))
-        );
-    }
-
-    getMin(getProp) {
-        return Math.min(
-            ...this.chartData
-                .map(chart => Math.min(...chart.points.map(getProp)))
-        );
+    scrollToViewport() {
+        this.slider.style.transform =`translateX(${this.viewport.start * this.canvas.width}px)`;
     }
 }

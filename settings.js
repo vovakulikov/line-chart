@@ -22,6 +22,7 @@ export default {
     },
     minimap: {
         minWidth: 40,
+        offsetTop: 10,
     },
     animation: {
         elasticity: 0.008,

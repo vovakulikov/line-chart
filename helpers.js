@@ -52,6 +52,21 @@ export const prepareChartData = (data) => data.columns
         return acc;
     }, {});
 
+export const prepareMinimapData = (data) => {
+    return data.columns
+        .filter(c => c[0] !== 'x')
+        .map((column) => {
+            const id = column[0];
+
+            return {
+                id,
+                dataPoints: column.slice(1),
+                color: data.colors[id],
+                isDisplayed: true,
+            };
+        });
+};
+
 export const getCoords = (elem) => {
     const box = elem.getBoundingClientRect();
 
@@ -71,3 +86,8 @@ export const getTranslateValue = (transform) => {
 export const isInRange = (value, min, max) => {
     return value >= min && value <= max;
 };
+
+export const updateViewport = (start, end, containerWidth) => {
+    return {start: Math.max(0.0, start / containerWidth), end: Math.min(end / containerWidth, 1.0)};
+};
+

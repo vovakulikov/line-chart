@@ -8,7 +8,7 @@ export default {
     },
     grid: {
         font: 'Arial',
-        fontSize: 18,
+        fontSize: 22,
         xLineWidth: 1.0,
         yLineWidth: 0.5,
         strokeStyle: 'rgba(0, 0, 0, 0.16)',

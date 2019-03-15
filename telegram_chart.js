@@ -68,7 +68,6 @@ const main = async () => {
     scrollToViewport(canvas, chartContainer.clientWidth, chartViewConfig.viewport);
 };
 
-let lastOffsetLeft;
 // reducer
 export const updateViewConfig = (start, width) => {
     const containerWidth = chartContainer.clientWidth;
@@ -315,8 +314,8 @@ const drawGrid = (ctx, {
     newLabels
         .forEach((label) => {
             if (labels.entities[label.value]) {
-                labels.entities[label.value].targetOpacity = 1;
-                labels.entities[label.value].targetStrokeOpacity = 1;
+                labels.entities[label.value].targetOpacity = 0.4;
+                labels.entities[label.value].targetStrokeOpacity = 0.16;
             } else {
                 labels.add(label);
             }
@@ -340,7 +339,7 @@ const drawGrid = (ctx, {
         ctx.lineTo(canvasWidth, height);
         ctx.fillStyle = `rgba(0,0,0, ${label.opacity})`;
         ctx.strokeStyle = `rgba(0, 0, 0, ${label.strokeOpacity})`;
-        ctx.fillText(Math.round(label.value).toString(), labelsX, height - 6);
+        ctx.fillText(Math.round(label.value).toString(), labelsX + 10, height - 6);
         ctx.stroke();
 
         ctx.restore();

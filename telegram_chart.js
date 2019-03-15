@@ -29,15 +29,12 @@ let chartViewConfig = {
 };
 const canvas = document.querySelector('.subscribers-chart');
 const chartContainer = document.querySelector('.chart-container');
-const animation = {
-    duration: 300,
-    styleFn: x => x * x,
-    animationStep: null,
-    valueToReach: 1,
-};
+
+let prevTs;
+let delta;
 
 const main = async () => {
-    const data = (await getData())[4];
+    const data = (await getData())[0];
     const legend = document.querySelector('.chart-legend');
 
     const legendButtons = makeLegendButtons(data);
@@ -52,13 +49,18 @@ const main = async () => {
     addScrollingListeners(canvas, chartContainer);
 
     // update cycle
-    const update = () => {
+    const update = (ts) => {
+        requestAnimationFrame(update);
+
+        const _prevTs = prevTs || ts;
+        prevTs = ts;
+        delta = Math.min(100.0, ts - _prevTs);
+
         if (chartViewConfig.shouldUpdate) {
-            canvas.width = calculateCanvasWidth(chartContainer.clientWidth, chartViewConfig.viewport);
-            draw(canvas, data, chartViewConfig.shouldAnimate);
+            canvas.width = calculateCanvasWidth(900, chartViewConfig.viewport);
         }
 
-        requestAnimationFrame(update);
+        draw(canvas, data, chartViewConfig.viewport);
     };
 
     // start drawing
@@ -103,7 +105,7 @@ const addScrollingListeners = (canvas, chartContainer) => {
             lastX = x;
             offsetLeft = Math.max(-(canvas.width - chartContainer.clientWidth), Math.min(offsetLeft + delta, 0));
 
-            canvas.style.transform = `translateX(${offsetLeft}px)`;
+            canvas.style.transform = `matrix(1, 0, 0, 1, ${offsetLeft}, 0)`;
 
             const viewportOffset = Math.abs(offsetLeft / canvas.width);
             const viewportWidth = chartViewConfig.viewport.end - chartViewConfig.viewport.start;
@@ -126,7 +128,6 @@ const addScrollingListeners = (canvas, chartContainer) => {
     });
 };
 
-// legend buttons
 const makeLegendButtons = (chartData) => {
     return Object.entries(chartData.names).map(([id, label]) => {
         const checkbox = document.createElement('input');
@@ -138,10 +139,7 @@ const makeLegendButtons = (chartData) => {
                 ...chartViewConfig,
                 chartDisplayState: {
                     ...chartViewConfig.chartDisplayState,
-                    [id]: {
-                        ...chartViewConfig.chartDisplayState[id],
-                        display: !chartViewConfig.chartDisplayState[id].display,
-                    }
+                    [id]: !chartViewConfig.chartDisplayState[id],
                 },
                 shouldAnimate: true,
                 shouldUpdate: true,
@@ -172,117 +170,180 @@ const wrapLegendButton = (checkbox, labelText, color) => {
     return button;
 };
 
-const draw = (canvas, chartData, animate) => {
+let lastMultiplier = 0;
+
+const draw = (canvas, chartData, viewport) => {
     const ctx = canvas.getContext('2d');
     const {width, height} = canvas;
+    const { start, end } = viewport;
 
     ctx.clearRect(0, 0, width, height);
 
-    const horizontalLines = 5;
     const labelsOffset = 40;
     const chartHeight = height - labelsOffset;
     const chartWidth = width;
     const xColumn = settings.data.xColumn;
-
-    // calculations
-    const displayedCharts = chartData.columns
-        .filter(c => c[0] !== xColumn && chartViewConfig.chartDisplayState[c[0]].display);
-
-    const maxPoint = Math.max(...displayedCharts.map(points => Math.max(...points.slice(1))));
-
-    const dimension = getDimension(maxPoint, horizontalLines);
-
-    const newZoomRatio = getZoomRatio(chartHeight, maxPoint);
 
     const dates = chartData.columns
         .find(c => c[0] === xColumn)
         .slice(1)
         .map(timestamp => new Date(timestamp));
 
+    // calculations
+    const displayedCharts = chartData.columns.filter(c => c[0] !== xColumn && chartViewConfig.chartDisplayState[c[0]]);
+
     const step = width / (displayedCharts[0].length - 2);
+    const diff = (dates[dates.length - 1] - dates[0]);
+    const startDate = +dates[0] + Math.round(start * diff);
+    const dueDate = +dates[0] + Math.round(end * diff);
+
+    let maxPoint = Math.max(
+        ...displayedCharts
+            .map(points => Math.max(
+                ...points.slice(1)
+                    .filter((el, index) => dates[index] >= new Date(startDate) && dates[index] <= new Date(dueDate))
+                )
+            )
+    );
+
+    let minPoint = Math.min(
+        ...displayedCharts
+            .map(points => Math.min(
+                ...points.slice(1)
+                    .filter((el, index) => dates[index] >= new Date(startDate) && dates[index] <= new Date(dueDate))
+                )
+            )
+    );
+    const multiplier = getZoomRatio(chartHeight, maxPoint);
+
+    if (!lastMultiplier) {
+        lastMultiplier = multiplier
+    } else {
+        const p = 0.008 * delta;
+        const diff = multiplier - lastMultiplier;
+        lastMultiplier = Math.abs(diff) < 0.00001  ? multiplier : lastMultiplier + p * diff;
+    }
 
     // drawing
-    drawGrid(ctx, {canvasWidth: width, canvasHeight: height, labelsOffset, dimension, step, dates});
-
-    const animationStep = 60 * animation.duration / 1000;
-
-    if (animate) {
-        animation.valueToReach = newZoomRatio;
-
-        if (animation.animationStep === null) {
-            animation.animationStep = (animation.valueToReach - chartViewConfig.zoomRatio) / animationStep;
-        }
-
-        chartViewConfig = {
-            ...chartViewConfig,
-            zoomRatio: chartViewConfig.zoomRatio + animation.animationStep,
-        };
-
-        if (animation.animationStep > 0 && chartViewConfig.zoomRatio > animation.valueToReach ||
-            animation.animationStep < 0 && chartViewConfig.zoomRatio < animation.valueToReach) {
-            chartViewConfig = {
-                ...chartViewConfig,
-                shouldAnimate: false,
-            };
-            animation.animationStep = null;
-            animation.valueToReach = 1;
-        }
-    } else {
-        chartViewConfig = {
-            ...chartViewConfig,
-            zoomRatio: newZoomRatio,
-        };
-    }
+    drawGrid(ctx, {
+        maxY: maxPoint,
+        minY: minPoint,
+        canvasWidth: width,
+        canvasHeight: height,
+        labelsOffset,
+        step,
+        dates,
+        multiplier: lastMultiplier,
+        finalMultiplier: multiplier,
+    });
 
     displayedCharts.forEach(chart => {
         const columnId = chart[0];
-        const displayState = chartViewConfig.chartDisplayState[columnId];
 
-        if (displayState.display) {
-            drawChart(ctx, {
-                chartWidth,
-                chartHeight,
-                dataPoints: chart.slice(1),
-                step,
-                zoomRatio: chartViewConfig.zoomRatio,
-                color: chartData.colors[columnId],
-            });
+        if (chartViewConfig.chartDisplayState[columnId]) {
+            drawChart(ctx, {chartWidth, chartHeight, dataPoints: chart.slice(1), step, zoomRatio: lastMultiplier, color: chartData.colors[columnId]});
         }
     });
 
     chartViewConfig = {
         ...chartViewConfig,
-        shouldUpdate: chartViewConfig.shouldAnimate,
+        shouldUpdate: false,
     };
 };
 
-const drawGrid = (ctx, {canvasWidth, canvasHeight, labelsOffset, dimension, step, dates}) => {
+// TODO Delete this and use just simple map
+class LabelsSet {
+    constructor() {
+       this.entities = {};
+    }
+
+    add(entity) {
+        if (!this.entities[entity.value]) {
+            this.entities[entity.value] = entity;
+        }
+    }
+
+    delete = (entity) => delete this.entities[entity.value];
+    getValues = () => Object.values(this.entities);
+    getKeys = () => Object.keys(this.entities);
+}
+
+const labels = new LabelsSet();
+
+const drawGrid = (ctx, {
+        canvasWidth,
+        canvasHeight,
+        labelsOffset,
+        step,
+        dates,
+        multiplier,
+        maxY,
+        minY,
+        finalMultiplier,
+    }) => {
     // styling
     ctx.strokeStyle = settings.grid.strokeStyle;
     ctx.lineWidth = settings.grid.yLineWidth;
     ctx.font = `${settings.grid.fontSize}px ${settings.grid.font}`;
     ctx.fillStyle = settings.grid.fillStyle;
 
-    const verticalLineStep = Math.floor(canvasHeight / 6);
     const chartHeight = canvasHeight - labelsOffset;
-    const {viewport} = chartViewConfig;
+    const { viewport } = chartViewConfig;
     const labelsX = canvasWidth * viewport.start;
+    const horizontalLines = 5;
+    const newMaxY = (chartHeight - 40) / finalMultiplier;
+    const dimension = getDimension(newMaxY, horizontalLines);
+    const newLabels = new Array(6).fill().map((el, index) => ({
+        targetOpacity: 1,
+        opacity: 0,
+        strokeOpacity: 0,
+        targetStrokeOpacity: 1,
+        value: dimension * index
+    }));
+
+    const p = 0.009 * delta;
+    const ps = 0.007 * delta;
+
+    labels.getValues().forEach((label) => {
+        label.targetOpacity = 0;
+        label.targetStrokeOpacity = 0;
+
+        return label;
+    });
+
+    newLabels
+        .forEach((label) => {
+            if (labels.entities[label.value]) {
+                labels.entities[label.value].targetOpacity = 1;
+                labels.entities[label.value].targetStrokeOpacity = 1;
+            } else {
+                labels.add(label);
+            }
+    });
 
     // drawing
     // y-axis labels
-    for (let i = 0; i < 6; i++) {
-        const height = Math.ceil(chartHeight - i * verticalLineStep);
+
+    labels.getValues().forEach((label) => {
+        const height = chartHeight - Math.floor(multiplier * label.value);
+
+        const diff = label.targetOpacity - label.opacity;
+        const strokeDiff = label.targetStrokeOpacity - label.strokeOpacity;
+        label.opacity +=  p * diff;
+        label.strokeOpacity +=  ps * strokeDiff;
 
         ctx.save();
 
         ctx.beginPath();
         ctx.moveTo(0, height);
         ctx.lineTo(canvasWidth, height);
-        ctx.fillText(dimension * i, labelsX, height - 6);
+        ctx.fillStyle = `rgba(0,0,0, ${label.opacity})`;
+        ctx.strokeStyle = `rgba(0, 0, 0, ${label.strokeOpacity})`;
+        ctx.fillText(Math.round(label.value).toString(), labelsX, height - 6);
         ctx.stroke();
 
         ctx.restore();
-    }
+    });
 
     ctx.lineWidth = settings.grid.xLineWidth;
 
@@ -310,8 +371,6 @@ const drawGrid = (ctx, {canvasWidth, canvasHeight, labelsOffset, dimension, step
             // TODO: remove vertical lines
             ctx.beginPath();
             ctx.moveTo(step * i, chartHeight);
-            ctx.lineTo(step * i, 0);
-            ctx.stroke();
 
             ctx.fillText(label, x, chartHeight + 20);
             ctx.restore();

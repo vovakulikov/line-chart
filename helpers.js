@@ -1,5 +1,5 @@
 export const getDimension = (maxPoint, horizontalLines) => {
-    const step = Math.ceil(maxPoint / horizontalLines);
+    const step = maxPoint / horizontalLines;
 
     // TODO: add rounding to beautiful numbers (5, 10, 100, etc.)
     return step;
@@ -66,4 +66,8 @@ export const getCoords = (elem) => {
 
 export const getTranslateValue = (transform) => {
     return +transform.replace(/[^\d.]/g, '');
+};
+
+export const isInRange = (value, min, max) => {
+    return value >= min && value <= max;
 };

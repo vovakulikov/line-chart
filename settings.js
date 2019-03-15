@@ -15,12 +15,15 @@ export default {
         fillStyle: 'rgba(0, 0, 0, 0.4)',
         marginBetweenLabels: 40,
         labelsOffset: 40,
-        horizontalLines: 5,
+        sections: 6,
     },
     chart: {
-        lineWidth: 1.0,
+        lineWidth: 3.0,
     },
     minimap: {
         minWidth: 40,
+    },
+    animation: {
+        elasticity: 0.008,
     }
 }

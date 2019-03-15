@@ -16,6 +16,6 @@ export default {
         marginBetweenLabels: 40,
     },
     chart: {
-        lineWidth: 1.0,
+        lineWidth: 3.0,
     }
 }

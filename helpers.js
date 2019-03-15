@@ -18,9 +18,10 @@ export const getLabelWidth = (text, fontSize) => {
     return text.length * fontSize / 2;
 };
 
-export const formatDate = (date) => {
+export const formatDate = (timestamp) => {
     // TODO: refactor this (toLocaleString?)
     const month_names_short = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+    const date = new Date(timestamp);
 
     return `${month_names_short[date.getMonth()]} ${date.getDate()}`;
 };
@@ -29,8 +30,44 @@ export const calculateCanvasWidth = (containerWidth, {start, end}) => {
     return containerWidth / (end - start);
 };
 
-export const scrollToViewport = (canvas, containerWidth, {start, end}) => {
-    canvas.width = calculateCanvasWidth(containerWidth, {start, end});
-    canvas.style.transform = `translateX(${getViewportX(canvas.width, start)}px)`;
+export const prepareChartData = (data) => data.columns
+    .filter(c => c[0] !== 'x')
+    .reduce((acc, c) => {
+        const id = c[0];
+
+        acc[id] = {
+            id,
+            dataPoints: c.slice(1),
+            name: data.names[id],
+            type: data.types[id],
+            color: data.colors[id],
+            displayState: {
+                isDisplayed: true,
+                isFading: false,
+                isReappearing: false,
+                opacity: 1.0,
+            }
+        };
+
+        return acc;
+    }, {});
+
+export const getCoords = (elem) => {
+    const box = elem.getBoundingClientRect();
+
+    return {
+        top: box.top + pageYOffset,
+        left: box.left + pageXOffset,
+        right: box.right - pageXOffset,
+        width: box.width,
+        height: box.height,
+    };
 };
 
+export const getTranslateValue = (transform) => {
+    return +transform.replace(/[^\d.]/g, '');
+};
+
+export const isInRange = (value, min, max) => {
+    return value >= min && value <= max;
+};

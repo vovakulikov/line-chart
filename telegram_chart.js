@@ -233,16 +233,13 @@ const draw = (canvas, chartData, viewport) => {
     if (!lastLowerBorder) {
         lastLowerBorder = lowerBorder;
     } else {
-
-        if (Math.abs(lowerBorder - lastLowerBorder) > 0.1 * (maxPoint / 5)) {
-            const p = 0.004 * delta;
-            const diff = lowerBorder - lastLowerBorder;
-            lastLowerBorder = lastLowerBorder + p * diff;
-            lastLowerBorder = Math.abs(diff) < 0.00000001  ? lowerBorder : lastLowerBorder + p * diff;
-        }
+        const p = 0.004 * delta;
+        const diff = lowerBorder - lastLowerBorder;
+        lastLowerBorder = lastLowerBorder + p * diff;
+        lastLowerBorder = Math.abs(diff) < 0.00000001  ? lowerBorder : lastLowerBorder + p * diff;
     }
 
-    const multiplier = getZoomRatio(chartHeight, maxPoint - lastLowerBorder);
+    const multiplier = getZoomRatio(chartHeight, maxPoint - lowerBorder);
     const zoomRatioX = chartWidth / diff;
 
     if (!lastMultiplier) {
@@ -252,6 +249,8 @@ const draw = (canvas, chartData, viewport) => {
         const diff = multiplier - lastMultiplier;
         lastMultiplier = Math.abs(diff) < 0.00001  ? multiplier : lastMultiplier + p * diff;
     }
+
+    console.log(lastMultiplier);
 
     // drawing
     drawGrid(ctx, {
@@ -264,6 +263,7 @@ const draw = (canvas, chartData, viewport) => {
         lowerBorder: lastLowerBorder,
         multiplier: lastMultiplier,
         finalMultiplier: multiplier,
+        finalLowerBorder: lowerBorder,
     });
 
     displayedCharts.forEach(chart => {
@@ -329,11 +329,11 @@ const drawGrid = (ctx, {
         canvasHeight,
         labelsOffset,
         dates,
-        lowerBorder,
         multiplier,
         maxY,
         minY,
         finalMultiplier,
+        finalLowerBorder,
     }) => {
     // styling
     ctx.strokeStyle = settings.grid.strokeStyle;
@@ -353,11 +353,11 @@ const drawGrid = (ctx, {
         level: 1,
         strokeOpacity: 0,
         targetStrokeOpacity: 1,
-        value: Math.floor(dimension * index + lowerBorder)
+        value: Math.floor(dimension * index + finalLowerBorder)
     }));
 
-    const p = 0.009 * delta;
-    const ps = 0.007 * delta;
+    const p = 0.005 * delta;
+    const ps = 0.003 * delta;
 
     labelsY.getValues().forEach((label) => {
         label.targetOpacity = 0;
@@ -375,7 +375,6 @@ const drawGrid = (ctx, {
         .forEach((label) => {
             if (labelsY.entities[label.value]) {
                 labelsY.entities[label.value].targetOpacity = 0.4;
-                labelsY.entities[label.value].level = 1;
                 labelsY.entities[label.value].targetStrokeOpacity = 0.16;
             } else {
                 labelsY.add(label, 'value');
@@ -385,11 +384,11 @@ const drawGrid = (ctx, {
     var lastDrawLineValue = 0;
 
     labelsY.getValues().forEach((label) => {
-        const height = chartHeight - (multiplier * label.value) + (lowerBorder * multiplier);
+        const height = chartHeight - (multiplier * label.value) + (finalLowerBorder * multiplier);
         const diff = label.targetOpacity - label.opacity;
         const strokeDiff = label.targetStrokeOpacity - label.strokeOpacity;
-        label.opacity += label.level * p * diff;
-        label.strokeOpacity += label.level * ps * strokeDiff;
+        label.opacity += p * diff;
+        label.strokeOpacity += ps * strokeDiff;
 
         ctx.save();
 

@@ -228,15 +228,18 @@ const draw = (canvas, chartData, viewport) => {
     );
 
     // const dimension = (maxY - lowerBorder) / horizontalLines;
-    const lowerBorder = getLowerBorder(maxPointG, minPointG, 0);
+    const lowerBorder = getLowerBorder(maxPoint, minPoint, 0);
 
     if (!lastLowerBorder) {
         lastLowerBorder = lowerBorder;
     } else {
-        const p = 0.008 * delta;
-        const diff = lowerBorder - lastLowerBorder;
-        lastLowerBorder = lastLowerBorder + p * diff;
-        lastLowerBorder = Math.abs(diff) < 0.00000001  ? lowerBorder : lastLowerBorder + p * diff;
+
+        if (Math.abs(lowerBorder - lastLowerBorder) > 0.1 * (maxPoint / 5)) {
+            const p = 0.004 * delta;
+            const diff = lowerBorder - lastLowerBorder;
+            lastLowerBorder = lastLowerBorder + p * diff;
+            lastLowerBorder = Math.abs(diff) < 0.00000001  ? lowerBorder : lastLowerBorder + p * diff;
+        }
     }
 
     const multiplier = getZoomRatio(chartHeight, maxPoint - lastLowerBorder);
@@ -347,6 +350,7 @@ const drawGrid = (ctx, {
     const newLabels = new Array(6).fill().map((el, index) => ({
         targetOpacity: 1,
         opacity: 0,
+        level: 1,
         strokeOpacity: 0,
         targetStrokeOpacity: 1,
         value: Math.floor(dimension * index + lowerBorder)
@@ -358,29 +362,34 @@ const drawGrid = (ctx, {
     labelsY.getValues().forEach((label) => {
         label.targetOpacity = 0;
         label.targetStrokeOpacity = 0;
+        label.level += 0.1;
 
         if (+label.opacity.toFixed(2) === 0) {
             delete labelsY.entities[label.value];
         }
     });
 
+    var storeLabels = {};
+
     newLabels
         .forEach((label) => {
             if (labelsY.entities[label.value]) {
                 labelsY.entities[label.value].targetOpacity = 0.4;
+                labelsY.entities[label.value].level = 1;
                 labelsY.entities[label.value].targetStrokeOpacity = 0.16;
             } else {
                 labelsY.add(label, 'value');
             }
     });
 
+    var lastDrawLineValue = 0;
+
     labelsY.getValues().forEach((label) => {
         const height = chartHeight - (multiplier * label.value) + (lowerBorder * multiplier);
-
         const diff = label.targetOpacity - label.opacity;
         const strokeDiff = label.targetStrokeOpacity - label.strokeOpacity;
-        label.opacity +=  p * diff;
-        label.strokeOpacity +=  ps * strokeDiff;
+        label.opacity += label.level * p * diff;
+        label.strokeOpacity += label.level * ps * strokeDiff;
 
         ctx.save();
 
@@ -393,6 +402,9 @@ const drawGrid = (ctx, {
         ctx.stroke();
 
         ctx.restore();
+
+        storeLabels[(Math.floor(label.value))] = true;
+        lastDrawLineValue = label.value;
     });
 
     ctx.lineWidth = settings.grid.xLineWidth;

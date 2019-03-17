@@ -129,12 +129,14 @@ slider.addEventListener('touchstart', (event) => {
 
         if ((event.pageX - leftShift) < wrapCoords.left) {
             slider.style.transform =`translateX(${0}px)`;
+            updateViewConfig(getTranslateValue(slider.style.transform), slider.clientWidth);
 
             return;
         }
 
         if ((event.pageX + rightShift) > wrapCoords.right ){
             slider.style.transform =`translateX(${wrapCoords.width - coords.width}px)`;
+            updateViewConfig(getTranslateValue(slider.style.transform), slider.clientWidth);
 
             return;
         }
@@ -181,6 +183,7 @@ rightHand.addEventListener('touchstart', (event) => {
 
         if (newWidth < MIN_WIDTH_VIEWPORT) {
             slider.style.width = `${MIN_WIDTH_VIEWPORT}px`;
+            updateViewConfig(getTranslateValue(slider.style.transform), slider.clientWidth);
 
             return;
         }
@@ -191,6 +194,7 @@ rightHand.addEventListener('touchstart', (event) => {
 
         if ((newWidth + (sliderCoords.left - wrapCoords.left)) >= (wrapCoords.right - wrapCoords.left)) {
             slider.style.width = `${wrapCoords.right - sliderCoords.left}px`;
+            updateViewConfig(getTranslateValue(slider.style.transform), slider.clientWidth);
 
             return;
         }
@@ -239,6 +243,7 @@ leftHand.addEventListener('touchstart', (event) => {
         if (newWidth < MIN_WIDTH_VIEWPORT) {
             slider.style.width = `${MIN_WIDTH_VIEWPORT}px`;
             slider.style.transform =`translateX(${sliderCoords.right - wrapCoords.left - MIN_WIDTH_VIEWPORT}px)`;
+            updateViewConfig(getTranslateValue(slider.style.transform), slider.clientWidth);
 
             return;
         }
@@ -250,6 +255,7 @@ leftHand.addEventListener('touchstart', (event) => {
         if ((event.pageX - leftShiftX) <= wrapCoords.left) {
             slider.style.width = `${sliderCoords.right - wrapCoords.left}px`;
             slider.style.transform =`translateX(0px)`;
+            updateViewConfig(getTranslateValue(slider.style.transform), slider.clientWidth);
 
             return;
         }

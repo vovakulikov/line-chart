@@ -1,8 +1,5 @@
 export const getDimension = (maxPoint, horizontalLines) => {
-    const step = maxPoint / horizontalLines;
-
-    // TODO: add rounding to beautiful numbers (5, 10, 100, etc.)
-    return step;
+    return maxPoint / horizontalLines;
 };
 
 export const getZoomRatio = (chartHeight, maxPoint) => {
@@ -15,14 +12,16 @@ export const getViewportX = (canvasWidth, viewportStart) => {
 
 export const getLabelWidth = (text, fontSize) => {
     // TODO: check this function
-    return text.length * fontSize / 2;
+    return Math.ceil(text.length * fontSize / 2);
 };
 
-export const formatDate = (date) => {
+export const formatDate = (ts) => {
     // TODO: refactor this (toLocaleString?)
+    const date = new Date(ts);
     const month_names_short = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 
-    return `${month_names_short[date.getMonth()]} ${date.getDate()}`;
+    const number = date.getDate() > 9 ? date.getDate() : `0${date.getDate()}`;
+    return `${month_names_short[date.getMonth()]} ${number}`;
 };
 
 export const calculateCanvasWidth = (containerWidth, {start, end}) => {

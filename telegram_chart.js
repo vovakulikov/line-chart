@@ -34,7 +34,7 @@ let prevTs;
 let delta;
 
 const main = async () => {
-    const data = (await getData())[0];
+    const data = (await getData())[4];
     const legend = document.querySelector('.chart-legend');
 
     const legendButtons = makeLegendButtons(data);
@@ -171,6 +171,8 @@ const wrapLegendButton = (checkbox, labelText, color) => {
 };
 
 let lastMultiplier = 0;
+let lastLowerBorder = 0;
+
 
 const draw = (canvas, chartData, viewport) => {
     const ctx = canvas.getContext('2d');
@@ -179,7 +181,7 @@ const draw = (canvas, chartData, viewport) => {
 
     ctx.clearRect(0, 0, width, height);
 
-    const labelsOffset = 40;
+    const labelsOffset = 60;
     const chartHeight = height - labelsOffset;
     const chartWidth = width;
     const xColumn = settings.data.xColumn;
@@ -191,11 +193,21 @@ const draw = (canvas, chartData, viewport) => {
 
     // calculations
     const displayedCharts = chartData.columns.filter(c => c[0] !== xColumn && chartViewConfig.chartDisplayState[c[0]]);
-
-    const step = width / (displayedCharts[0].length - 2);
     const diff = (dates[dates.length - 1] - dates[0]);
     const startDate = +dates[0] + Math.round(start * diff);
     const dueDate = +dates[0] + Math.round(end * diff);
+
+    let maxPointG = Math.max(
+        ...displayedCharts
+            .map(points => Math.max(...points.slice(1))
+            )
+    );
+
+    let minPointG = Math.min(
+        ...displayedCharts
+            .map(points => Math.min(...points.slice(1))
+            )
+    );
 
     let maxPoint = Math.max(
         ...displayedCharts
@@ -214,7 +226,21 @@ const draw = (canvas, chartData, viewport) => {
                 )
             )
     );
-    const multiplier = getZoomRatio(chartHeight, maxPoint);
+
+    // const dimension = (maxY - lowerBorder) / horizontalLines;
+    const lowerBorder = getLowerBorder(maxPointG, minPointG, 0);
+
+    if (!lastLowerBorder) {
+        lastLowerBorder = lowerBorder;
+    } else {
+        const p = 0.008 * delta;
+        const diff = lowerBorder - lastLowerBorder;
+        lastLowerBorder = lastLowerBorder + p * diff;
+        lastLowerBorder = Math.abs(diff) < 0.00000001  ? lowerBorder : lastLowerBorder + p * diff;
+    }
+
+    const multiplier = getZoomRatio(chartHeight, maxPoint - lastLowerBorder);
+    const zoomRatioX = chartWidth / diff;
 
     if (!lastMultiplier) {
         lastMultiplier = multiplier
@@ -231,8 +257,8 @@ const draw = (canvas, chartData, viewport) => {
         canvasWidth: width,
         canvasHeight: height,
         labelsOffset,
-        step,
         dates,
+        lowerBorder: lastLowerBorder,
         multiplier: lastMultiplier,
         finalMultiplier: multiplier,
     });
@@ -241,7 +267,16 @@ const draw = (canvas, chartData, viewport) => {
         const columnId = chart[0];
 
         if (chartViewConfig.chartDisplayState[columnId]) {
-            drawChart(ctx, {chartWidth, chartHeight, dataPoints: chart.slice(1), step, zoomRatio: lastMultiplier, color: chartData.colors[columnId]});
+            drawChart(ctx, {
+                chartWidth,
+                lowerBorder: lastLowerBorder,
+                chartHeight,
+                dates,
+                dataPoints: chart.slice(1),
+                zoomRatioX,
+                zoomRatio: lastMultiplier,
+                color: chartData.colors[columnId]
+            });
         }
     });
 
@@ -257,9 +292,9 @@ class LabelsSet {
        this.entities = {};
     }
 
-    add(entity) {
-        if (!this.entities[entity.value]) {
-            this.entities[entity.value] = entity;
+    add(entity, byKey) {
+        if (!this.entities[entity[byKey]]) {
+            this.entities[entity[byKey]] = entity;
         }
     }
 
@@ -268,14 +303,30 @@ class LabelsSet {
     getKeys = () => Object.keys(this.entities);
 }
 
-const labels = new LabelsSet();
+const labelsY = new LabelsSet();
+const labelsX = new LabelsSet();
+
+function getLowerBorder(maxY, minY, lowerBorder) {
+    const horizontalLines = 5;
+    const dimension = (maxY - lowerBorder) / horizontalLines;
+    const labels = new Array(6)
+        .fill(0)
+        .map((el, index) => dimension * index + lowerBorder);
+
+    const firstHighLine = labels.findIndex((y) => y > minY);
+    const lowerLine = labels[firstHighLine] - dimension;
+
+    return lowerLine === lowerBorder
+        ? lowerBorder
+        : Math.floor(getLowerBorder(maxY, minY, lowerLine))
+}
 
 const drawGrid = (ctx, {
         canvasWidth,
         canvasHeight,
         labelsOffset,
-        step,
         dates,
+        lowerBorder,
         multiplier,
         maxY,
         minY,
@@ -289,43 +340,42 @@ const drawGrid = (ctx, {
 
     const chartHeight = canvasHeight - labelsOffset;
     const { viewport } = chartViewConfig;
-    const labelsX = canvasWidth * viewport.start;
+    const offsetX = canvasWidth * viewport.start;
     const horizontalLines = 5;
     const newMaxY = (chartHeight - 40) / finalMultiplier;
-    const dimension = getDimension(newMaxY, horizontalLines);
+    const dimension = newMaxY / horizontalLines;
     const newLabels = new Array(6).fill().map((el, index) => ({
         targetOpacity: 1,
         opacity: 0,
         strokeOpacity: 0,
         targetStrokeOpacity: 1,
-        value: dimension * index
+        value: Math.floor(dimension * index + lowerBorder)
     }));
 
     const p = 0.009 * delta;
     const ps = 0.007 * delta;
 
-    labels.getValues().forEach((label) => {
+    labelsY.getValues().forEach((label) => {
         label.targetOpacity = 0;
         label.targetStrokeOpacity = 0;
 
-        return label;
+        if (+label.opacity.toFixed(2) === 0) {
+            delete labelsY.entities[label.value];
+        }
     });
 
     newLabels
         .forEach((label) => {
-            if (labels.entities[label.value]) {
-                labels.entities[label.value].targetOpacity = 0.4;
-                labels.entities[label.value].targetStrokeOpacity = 0.16;
+            if (labelsY.entities[label.value]) {
+                labelsY.entities[label.value].targetOpacity = 0.4;
+                labelsY.entities[label.value].targetStrokeOpacity = 0.16;
             } else {
-                labels.add(label);
+                labelsY.add(label, 'value');
             }
     });
 
-    // drawing
-    // y-axis labels
-
-    labels.getValues().forEach((label) => {
-        const height = chartHeight - Math.floor(multiplier * label.value);
+    labelsY.getValues().forEach((label) => {
+        const height = chartHeight - (multiplier * label.value) + (lowerBorder * multiplier);
 
         const diff = label.targetOpacity - label.opacity;
         const strokeDiff = label.targetStrokeOpacity - label.strokeOpacity;
@@ -339,7 +389,7 @@ const drawGrid = (ctx, {
         ctx.lineTo(canvasWidth, height);
         ctx.fillStyle = `rgba(0,0,0, ${label.opacity})`;
         ctx.strokeStyle = `rgba(0, 0, 0, ${label.strokeOpacity})`;
-        ctx.fillText(Math.round(label.value).toString(), labelsX + 10, height - 6);
+        ctx.fillText(Math.floor(label.value).toString(), offsetX + 10, height - 6);
         ctx.stroke();
 
         ctx.restore();
@@ -347,56 +397,103 @@ const drawGrid = (ctx, {
 
     ctx.lineWidth = settings.grid.xLineWidth;
 
-    // x-axis labels
-    let previousLabelEnd = 0;
+    const diff = (dates[dates.length - 1] - dates[0]);
+    const globalStep = diff / 5;
+    const ratioX = canvasWidth / diff;
 
-    for (let i = 0; i < dates.length; i++) {
-        const label = formatDate(dates[i]);
-        const labelWidth = getLabelWidth(label, settings.grid.fontSize);
-        const margin = settings.grid.marginBetweenLabels;
-        let x;
+    const newLabelsX = [];
+    let step = globalStep;
 
-        if (i === 0) {
-            x = 0;
-        } else if (i === dates.length - 1) {
-            x = step * i - labelWidth;
-        } else {
-            x = step * i - labelWidth / 2;
-        }
-
-        if (i === 0 || i === dates.length - 1 ||
-            (x > previousLabelEnd + margin && x < canvasWidth - labelWidth - margin)) {
-            ctx.save();
-
-            // TODO: remove vertical lines
-            ctx.beginPath();
-            ctx.moveTo(step * i, chartHeight);
-
-            ctx.fillText(label, x, chartHeight + 20);
-            ctx.restore();
-
-            previousLabelEnd = x + labelWidth;
-        }
+    while (step > globalStep * 1.618 * (viewport.end - viewport.start)) {
+        step = step / 2;
     }
+
+    let currentDate = +dates[0];
+
+    do {
+        const label = formatDate(currentDate);
+        const labelWidth = 70;
+        let offset = 0;
+
+        if (currentDate === +dates[0]) {
+            offset = 0;
+        } else if (currentDate >= +dates[dates.length - 1]) {
+            offset = -1 * labelWidth;
+        } else {
+            offset = -1 * labelWidth / 2
+        }
+
+        newLabelsX.push(
+            {
+                label,
+                width: labelWidth,
+                date: currentDate,
+                offset,
+                targetOpacity: 1,
+                opacity: 0,
+            }
+        );
+
+        currentDate += step;
+    } while(currentDate < (+dates[dates.length -1]));
+
+    const label = formatDate(dates[dates.length - 1]);
+    const labelWidth = getLabelWidth(label, settings.grid.fontSize);
+
+    newLabelsX.push({
+        label,
+        width: labelWidth,
+        offset: -1 * labelWidth - 2,
+        date: dates[dates.length - 1],
+        targetOpacity: 0.4,
+        opacity: 0,
+    });
+
+    labelsX.getValues().forEach((label) => {
+        label.targetOpacity = 0;
+
+        return label;
+    });
+
+    newLabelsX.forEach((label) => {
+        if (labelsX.entities[label.label]) {
+            labelsX.entities[label.label].targetOpacity = 0.4;
+        } else {
+            labelsX.add(label, 'label');
+        }
+    });
+
+    labelsX.getValues().forEach((label) => {
+        const diff = label.targetOpacity - label.opacity;
+        const x = (label.date - dates[0]) * ratioX + label.offset;
+        label.opacity += p * diff;
+
+        ctx.save();
+
+        ctx.beginPath();
+        ctx.moveTo(label.x, canvasHeight );
+
+        ctx.fillStyle = `rgba(0,0,0, ${label.opacity})`;
+        ctx.fillText(label.label, x, canvasHeight - 20);
+        ctx.restore();
+    });
 };
 
-const drawChart = (ctx, {chartWidth, chartHeight, dataPoints, step, zoomRatio, color}) => {
+const drawChart = (ctx, { zoomRatioX, lowerBorder, dates, chartWidth, chartHeight, dataPoints, zoomRatio, color}) => {
     // styling
     ctx.lineWidth = settings.chart.lineWidth;
 
-    let curX = 0;
     let curY = chartHeight - dataPoints[0] * zoomRatio;
 
     // drawing
     ctx.save();
     ctx.beginPath();
-    ctx.moveTo(curX, curY);
+    ctx.moveTo(0, curY);
     ctx.strokeStyle = color;
 
-    for (let i = 1; i < dataPoints.length; i++) {
-        curX += step;
-        curY = chartHeight - dataPoints[i] * zoomRatio;
-        ctx.lineTo(curX, curY);
+    for (let i = 0; i < dataPoints.length; i++) {
+        curY = chartHeight - (dataPoints[i] - lowerBorder) * zoomRatio ;
+        ctx.lineTo((dates[i] - dates[0]) * zoomRatioX, curY);
     }
 
     ctx.stroke();

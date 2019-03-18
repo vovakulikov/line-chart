@@ -1,5 +1,5 @@
 import {chartData} from './chart_data.js';
-import {formatDate, getDimension, getLabelWidth, getZoomRatio, getViewportX, calculateCanvasWidth, scrollToViewport} from './helpers.js';
+import {formatDate, rafThrottle,hexToRGB,  getDimension, getLabelWidth, getZoomRatio, getViewportX, calculateCanvasWidth, scrollToViewport} from './helpers.js';
 import settings from "./settings.js";
 
 // TODO: turn into a store and update with reducers
@@ -12,12 +12,14 @@ let chartViewConfig = {
         y0: {
             display: true,
             opacity: 1.0,
+            targetOpacity: 1.0,
             isFading: false,
             isReappearing: false,
         },
         y1: {
             display: true,
             opacity: 1.0,
+            targetOpacity: 1.0,
             isFading: false,
             isReappearing: false,
         }
@@ -34,7 +36,7 @@ let prevTs;
 let delta;
 
 const main = async () => {
-    const data = (await getData())[4];
+    const data = (await getData())[2];
     const legend = document.querySelector('.chart-legend');
 
     const legendButtons = makeLegendButtons(data);
@@ -139,7 +141,7 @@ const makeLegendButtons = (chartData) => {
                 ...chartViewConfig,
                 chartDisplayState: {
                     ...chartViewConfig.chartDisplayState,
-                    [id]: !chartViewConfig.chartDisplayState[id],
+                    [id]: { ...chartViewConfig.chartDisplayState[id], display: !chartViewConfig.chartDisplayState[id].display },
                 },
                 shouldAnimate: true,
                 shouldUpdate: true,
@@ -172,7 +174,31 @@ const wrapLegendButton = (checkbox, labelText, color) => {
 
 let lastMultiplier = 0;
 let lastLowerBorder = 0;
+let lastLengthSet;
+var [gbT, forceUpdate] = rafThrottle(getBorders, 250);
 
+function getBorders(displayedCharts, startDate, dueDate, dates) {
+    let maxPoint = Math.max(
+        ...displayedCharts
+            .map(chart => Math.max(
+                ...chart.dataset
+                    .filter((el, index) => dates[index] >= startDate && dates[index] <= dueDate)
+                )
+            )
+    );
+
+    let minPoint = Math.min(
+        ...displayedCharts
+            .map(chart => Math.min(
+                ...chart.dataset
+                    .filter((el, index) => dates[index] >= startDate && dates[index] <= dueDate)
+                )
+            )
+    );
+
+
+    return [minPoint, maxPoint];
+}
 
 const draw = (canvas, chartData, viewport) => {
     const ctx = canvas.getContext('2d');
@@ -192,42 +218,41 @@ const draw = (canvas, chartData, viewport) => {
         .map(timestamp => new Date(timestamp));
 
     // calculations
-    const displayedCharts = chartData.columns.filter(c => c[0] !== xColumn && chartViewConfig.chartDisplayState[c[0]]);
+    const charts = chartData.columns.filter(c => c[0] !== xColumn);
+    const displayedCharts = charts
+        .filter(c => chartViewConfig.chartDisplayState[c[0]].opacity.toFixed(2) > 0 || chartViewConfig.chartDisplayState[c[0]].display)
+        .map((c) => {
+            return { ...chartViewConfig.chartDisplayState[c[0]], dataset: c.slice(1), id: c[0] };
+        });
+
+    const chartForCalculate = displayedCharts.filter((chart) => chart.display);
+
+    const newCharts = displayedCharts.map((chart) => {
+        const targetOpacity = chart.display ? 1 : 0;
+
+        const p = 0.008 * delta;
+        const diff = targetOpacity - chart.opacity;
+        const opacity = Math.abs(diff) < Number.EPSILON  ? targetOpacity : chart.opacity + p * diff;
+
+        chartViewConfig.chartDisplayState[chart.id].opacity = Math.max(opacity, 0);
+
+        return { ...chart, opacity, targetOpacity };
+    });
+
     const diff = (dates[dates.length - 1] - dates[0]);
     const startDate = +dates[0] + Math.round(start * diff);
     const dueDate = +dates[0] + Math.round(end * diff);
 
-    let maxPointG = Math.max(
-        ...displayedCharts
-            .map(points => Math.max(...points.slice(1))
-            )
-    );
+    if (!lastLengthSet) {
+        lastLengthSet = displayedCharts.length;
+    }
 
-    let minPointG = Math.min(
-        ...displayedCharts
-            .map(points => Math.min(...points.slice(1))
-            )
-    );
+    if (lastLengthSet.length != displayedCharts.length) {
+        forceUpdate();
+    }
 
-    let maxPoint = Math.max(
-        ...displayedCharts
-            .map(points => Math.max(
-                ...points.slice(1)
-                    .filter((el, index) => dates[index] >= new Date(startDate) && dates[index] <= new Date(dueDate))
-                )
-            )
-    );
+    const [minPoint, maxPoint] = gbT(chartForCalculate, new Date(startDate), new Date(dueDate), dates);
 
-    let minPoint = Math.min(
-        ...displayedCharts
-            .map(points => Math.min(
-                ...points.slice(1)
-                    .filter((el, index) => dates[index] >= new Date(startDate) && dates[index] <= new Date(dueDate))
-                )
-            )
-    );
-
-    // const dimension = (maxY - lowerBorder) / horizontalLines;
     const lowerBorder = getLowerBorder(maxPoint, minPoint, 0);
 
     if (!lastLowerBorder) {
@@ -236,7 +261,7 @@ const draw = (canvas, chartData, viewport) => {
         const p = 0.004 * delta;
         const diff = lowerBorder - lastLowerBorder;
         lastLowerBorder = lastLowerBorder + p * diff;
-        lastLowerBorder = Math.abs(diff) < 0.00000001  ? lowerBorder : lastLowerBorder + p * diff;
+        lastLowerBorder = Math.abs(diff) < Number.EPSILON  ? lowerBorder : lastLowerBorder + p * diff;
     }
 
     const multiplier = getZoomRatio(chartHeight, maxPoint - lowerBorder);
@@ -247,10 +272,8 @@ const draw = (canvas, chartData, viewport) => {
     } else {
         const p = 0.008 * delta;
         const diff = multiplier - lastMultiplier;
-        lastMultiplier = Math.abs(diff) < 0.00001  ? multiplier : lastMultiplier + p * diff;
+        lastMultiplier = Math.abs(diff) < Number.EPSILON  ? multiplier : lastMultiplier + p * diff;
     }
-
-    console.log(lastMultiplier);
 
     // drawing
     drawGrid(ctx, {
@@ -266,21 +289,20 @@ const draw = (canvas, chartData, viewport) => {
         finalLowerBorder: lowerBorder,
     });
 
-    displayedCharts.forEach(chart => {
-        const columnId = chart[0];
+    newCharts.forEach(chart => {
+        const columnId = chart.id;
 
-        if (chartViewConfig.chartDisplayState[columnId]) {
-            drawChart(ctx, {
-                chartWidth,
-                lowerBorder: lastLowerBorder,
-                chartHeight,
-                dates,
-                dataPoints: chart.slice(1),
-                zoomRatioX,
-                zoomRatio: lastMultiplier,
-                color: chartData.colors[columnId]
-            });
-        }
+        drawChart(ctx, {
+            chartWidth,
+            lowerBorder: lastLowerBorder,
+            chartHeight,
+            dates,
+            dataPoints: chart.dataset,
+            zoomRatioX,
+            zoomRatio: lastMultiplier,
+            opacity: chart.opacity,
+            color: chartData.colors[columnId]
+        });
     });
 
     chartViewConfig = {
@@ -334,6 +356,7 @@ const drawGrid = (ctx, {
         minY,
         finalMultiplier,
         finalLowerBorder,
+        lowerBorder,
     }) => {
     // styling
     ctx.strokeStyle = settings.grid.strokeStyle;
@@ -353,7 +376,8 @@ const drawGrid = (ctx, {
         level: 1,
         strokeOpacity: 0,
         targetStrokeOpacity: 1,
-        value: Math.floor(dimension * index + finalLowerBorder)
+        currentValue: Math.floor(dimension * index + finalLowerBorder),
+        value: Math.floor(dimension * index + lowerBorder)
     }));
 
     const p = 0.005 * delta;
@@ -365,7 +389,7 @@ const drawGrid = (ctx, {
         label.level += 0.1;
 
         if (+label.opacity.toFixed(2) === 0) {
-            delete labelsY.entities[label.value];
+            delete labelsY.entities[label.currentValue];
         }
     });
 
@@ -373,18 +397,18 @@ const drawGrid = (ctx, {
 
     newLabels
         .forEach((label) => {
-            if (labelsY.entities[label.value]) {
-                labelsY.entities[label.value].targetOpacity = 0.4;
-                labelsY.entities[label.value].targetStrokeOpacity = 0.16;
+            if (labelsY.entities[label.currentValue]) {
+                labelsY.entities[label.currentValue].targetOpacity = 0.4;
+                labelsY.entities[label.currentValue].targetStrokeOpacity = 0.16;
             } else {
-                labelsY.add(label, 'value');
+                labelsY.add(label, 'currentValue');
             }
     });
 
     var lastDrawLineValue = 0;
 
     labelsY.getValues().forEach((label) => {
-        const height = chartHeight - (multiplier * label.value) + (finalLowerBorder * multiplier);
+        const height = chartHeight - (multiplier * label.currentValue) + (lowerBorder * multiplier);
         const diff = label.targetOpacity - label.opacity;
         const strokeDiff = label.targetStrokeOpacity - label.strokeOpacity;
         label.opacity += p * diff;
@@ -397,7 +421,7 @@ const drawGrid = (ctx, {
         ctx.lineTo(canvasWidth, height);
         ctx.fillStyle = `rgba(0,0,0, ${label.opacity})`;
         ctx.strokeStyle = `rgba(0, 0, 0, ${label.strokeOpacity})`;
-        ctx.fillText(Math.floor(label.value).toString(), offsetX + 10, height - 6);
+        ctx.fillText(Math.floor(label.currentValue).toString(), offsetX + 10, height - 6);
         ctx.stroke();
 
         ctx.restore();
@@ -490,17 +514,18 @@ const drawGrid = (ctx, {
     });
 };
 
-const drawChart = (ctx, { zoomRatioX, lowerBorder, dates, chartWidth, chartHeight, dataPoints, zoomRatio, color}) => {
+const drawChart = (ctx, { zoomRatioX, lowerBorder, dates, opacity, chartWidth, chartHeight, dataPoints, zoomRatio, color}) => {
     // styling
     ctx.lineWidth = settings.chart.lineWidth;
 
-    let curY = chartHeight - dataPoints[0] * zoomRatio;
+    let curY = chartHeight - (dataPoints[0] - lowerBorder) * zoomRatio;
+    let updatedColor = hexToRGB(color, opacity);
 
     // drawing
     ctx.save();
     ctx.beginPath();
     ctx.moveTo(0, curY);
-    ctx.strokeStyle = color;
+    ctx.strokeStyle = updatedColor;
 
     for (let i = 0; i < dataPoints.length; i++) {
         curY = chartHeight - (dataPoints[i] - lowerBorder) * zoomRatio ;

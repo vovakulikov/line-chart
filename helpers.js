@@ -33,3 +33,36 @@ export const scrollToViewport = (canvas, containerWidth, {start, end}) => {
     canvas.style.transform = `translateX(${getViewportX(canvas.width, start)}px)`;
 };
 
+export const rafThrottle = function t(f, time) {
+    var lastCallTime = performance.now();
+    var lastArgs;
+    var lastResult;
+    var isFirst = true;
+
+    return [function () {
+        var actualTime = performance.now();
+        lastArgs = arguments;
+
+        if ((actualTime - lastCallTime) >= time || isFirst) {
+            lastResult = f.apply(this, lastArgs);
+            lastCallTime = actualTime;
+            isFirst = false;
+        }
+
+
+        return lastResult;
+    }, () => lastCallTime = 0]
+}
+
+
+export function hexToRGB(hex, alpha) {
+    var r = parseInt(hex.slice(1, 3), 16),
+        g = parseInt(hex.slice(3, 5), 16),
+        b = parseInt(hex.slice(5, 7), 16);
+
+    if (alpha) {
+        return "rgba(" + r + ", " + g + ", " + b + ", " + alpha + ")";
+    } else {
+        return "rgb(" + r + ", " + g + ", " + b + ")";
+    }
+}

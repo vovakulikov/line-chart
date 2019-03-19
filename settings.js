@@ -19,6 +19,13 @@ export default {
     },
     chart: {
         lineWidth: 3.0,
+        dotRadius: 6.0,
+        dotLineWidth: 6.0,
+        backgroundColor: {
+            default: '#ffffff',
+            nightMode: '#000000',
+        }
+
     },
     minimap: {
         minWidth: 40,

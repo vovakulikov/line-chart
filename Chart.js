@@ -1,6 +1,6 @@
 import {
-    prepareChartData, formatDate, getLabelWidth, getZoomRatio, calculateCanvasWidth,
-    getViewportX, isInRange, getDimension
+    prepareChartData, formatDate, getLabelWidth, getZoomRatio, calculateCanvasWidth, getWeekDay,
+    getViewportX, isInRange, getDimension, getAbsoluteXCoordinate, getPointIndexFromCoordinate, getRelativeXCoordinate,
 } from './helpers.js';
 import settings from "./settings.js";
 
@@ -21,6 +21,8 @@ export class Chart {
                 prevTs: null,
                 delta: null,
             },
+            selectedPointIdx: null,
+            selectedPointX: null,
         };
         this.viewport$ = viewport$;
         this.displayedCharts$ = displayedCharts$;
@@ -29,6 +31,7 @@ export class Chart {
         this.viewport$.subscribe(() => {
             this.scrollToViewport();
             this.shouldUpdate = true;
+
         });
 
         this.displayedCharts$.subscribe(displayed => {
@@ -57,7 +60,7 @@ export class Chart {
     init() {
         requestAnimationFrame(this.update);
         this.canvas.width = calculateCanvasWidth(this.chartContainer.clientWidth, this.viewport);
-        this.addScrollingListeners();
+        this.addEventListeners();
         this.scrollToViewport();
 
         const legendButtons = this.makeLegendButtons();
@@ -116,6 +119,10 @@ export class Chart {
                 this.drawChart(ctx, id);
             }
         });
+
+        if (this.viewConfig.selectedPointX) {
+            this.showPointInfo(this.viewConfig.selectedPointX);
+        }
     }
 
     drawGrid(ctx, lastZoomRatio) {
@@ -234,7 +241,6 @@ export class Chart {
         let curY = this.chartHeight - dataPoints[0] * this.viewConfig.zoomRatio;
 
         // drawing
-        ctx.save();
         ctx.beginPath();
         ctx.moveTo(curX, curY);
         ctx.strokeStyle = chart.color;
@@ -249,57 +255,90 @@ export class Chart {
         ctx.restore();
     }
 
+    drawSelectedPoint(ctx, x, y, color) {
+        const r = settings.chart.dotRadius;
+
+        ctx.save();
+        ctx.beginPath();
+        ctx.strokeStyle = color;
+        ctx.lineWidth = settings.chart.dotLineWidth;
+        ctx.fillStyle = this.viewConfig.isNightMode
+            ? settings.chart.backgroundColor.nightMode
+            : settings.chart.backgroundColor.default;
+
+        ctx.arc(x - r, y - r + 4, r, 0, Math.PI * 2);
+
+        ctx.stroke();
+        ctx.fill();
+        ctx.restore();
+    }
+
     scrollToViewport() {
         const {start, end} = this.viewport;
 
         this.canvas.width = calculateCanvasWidth(this.chartContainer.clientWidth, {start, end});
         this.offsetLeft = getViewportX(this.canvas.width, start);
-        this.canvas.style.transform = `matrix(1, 0, 0, 1, ${this.offsetLeft}, 0)`;
+        this.canvas.style.transform = `translateX(${this.offsetLeft}px)`;
     }
 
-    addScrollingListeners() {
-        // scrolling
-        let isDragging = false;
-        let lastX = 0;
+    showPointInfo() {
+        const ctx = this.canvas.getContext('2d');
+        const step = this.canvas.width / (this.dates.length);
+        const idx = getPointIndexFromCoordinate(this.viewConfig.selectedPointX, step);
 
-        this.canvas.addEventListener('touchstart', event => {
-            isDragging = true;
-            lastX = event.touches[0].clientX;
-            event.preventDefault();
-        });
+        Object.values(this.charts).forEach(chart => {
+            if (this.charts[chart.id].displayState.isDisplayed) {
+                const y = this.chartHeight - chart.dataPoints[idx] * this.viewConfig.zoomRatio;
 
-        this.canvas.addEventListener('touchmove', event => {
-            if (isDragging) {
-                const x = event.touches[0].clientX;
-                const delta = x - lastX;
-
-                lastX = x;
-                this.offsetLeft = Math.max(
-                    -(this.canvas.width - this.chartContainer.clientWidth),
-                    Math.min(this.offsetLeft + delta, 0)
-                );
-
-                this.canvas.style.transform = `matrix(1, 0, 0, 1, ${this.offsetLeft}, 0)`;
-
-                const viewportOffset = Math.abs(this.offsetLeft / this.canvas.width);
-                const viewportWidth = this.viewport.end - this.viewport.start;
-
-                const start = viewportOffset;
-                const end = Math.min(viewportOffset + viewportWidth, 1);
-
-                this.viewport$.addEvent({start, end});
-                this.shouldUpdate = true;
+                this.drawSelectedPoint(ctx, step * (idx + 1), y, chart.color);
             }
-
-            event.preventDefault();
         });
 
-        window.addEventListener('touchend', () => {
-            isDragging = false;
+        const pointsData = Object.values(this.charts).map(chart => {
+            return {
+                value: chart.dataPoints[idx],
+                chartName: chart.name,
+                color: chart.color,
+            }
         });
-    };
 
-    makeLegendButtons = () => {
+        if (this.viewConfig.selectedPointIdx !== idx) {
+            // TODO: also update if number of displayed chart changed
+            this.updateSelectedPointTooltipData(this.dates[idx], pointsData, this.viewConfig.selectedPointX);
+        }
+
+        this.viewConfig.selectedPointIdx = idx;
+    }
+
+    updateSelectedPointTooltipData(date, pointsData, xCoord) {
+        const tooltip = document.querySelector('.selected-tooltip');
+        const header = tooltip.querySelector('.selected-tooltip__header');
+        const labelContainer = tooltip.querySelector('.selected-tooltip__label-container');
+
+        labelContainer.innerHTML = '';
+        header.textContent = `${getWeekDay(date)}, ${formatDate(date)}`;
+        tooltip.style.display = 'block';
+        tooltip.style.left = `${getRelativeXCoordinate(this.canvas, xCoord) - 60}px`;
+
+        pointsData.forEach(data => {
+            const label = document.createElement('div');
+            const value = document.createElement('span');
+            const chartName = document.createElement('span');
+
+            label.classList.add('selected-tooltip__label');
+            label.style.color = data.color;
+            value.classList.add('selected-tooltip__value');
+            value.textContent = data.value;
+            chartName.classList.add('selected-tooltip__chart-name');
+            chartName.textContent = data.chartName;
+
+            label.appendChild(value);
+            label.appendChild(chartName);
+            labelContainer.appendChild(label);
+        });
+    }
+
+    makeLegendButtons() {
         return Object.values(this.charts).map(({id, name, color}) => {
             const checkbox = document.createElement('input');
             checkbox.type = 'checkbox';
@@ -323,7 +362,7 @@ export class Chart {
         });
     };
 
-    wrapLegendButton = (checkbox, labelText, color) => {
+    wrapLegendButton(checkbox, labelText, color) {
         const button = document.createElement('label');
         const text = document.createTextNode(labelText);
         const checkboxLabel = document.createElement('span');
@@ -341,5 +380,12 @@ export class Chart {
         button.appendChild(checkboxLabel);
 
         return button;
+    };
+
+    addEventListeners() {
+        this.canvas.addEventListener('touchstart', event => {
+            this.viewConfig.selectedPointX = getAbsoluteXCoordinate(this.canvas, event.touches[0].clientX);
+            event.preventDefault();
+        });
     };
 }

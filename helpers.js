@@ -26,6 +26,13 @@ export const formatDate = (timestamp) => {
     return `${month_names_short[date.getMonth()]} ${date.getDate()}`;
 };
 
+export const getWeekDay = (timestamp) => {
+    const week_days_short = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+    const date = new Date(timestamp);
+
+    return week_days_short[date.getDay()];
+};
+
 export const calculateCanvasWidth = (containerWidth, {start, end}) => {
     return containerWidth / (end - start);
 };
@@ -91,3 +98,16 @@ export const updateViewport = (start, end, containerWidth) => {
     return {start: Math.max(0.0, start / containerWidth), end: Math.min(end / containerWidth, 1.0)};
 };
 
+export const getAbsoluteXCoordinate = (canvas, xCoord) => {
+    // FIXME: add real padding & margin
+    return +xCoord + +getTranslateValue(canvas.style.transform) - 49;
+};
+
+export const getRelativeXCoordinate = (canvas, xCoord) => {
+    // FIXME: add real padding & margin
+    return xCoord - getTranslateValue(canvas.style.transform) + 49;
+};
+
+export const getPointIndexFromCoordinate = (xCoord, step) => {
+    return Math.round(xCoord / step) - 1;
+};

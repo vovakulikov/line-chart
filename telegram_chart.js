@@ -56,7 +56,7 @@ const scrollToViewport = (canvas, containerWidth, {start, end}) => {
 
 
 const main = async () => {
-	const data = (await getData())[1];
+	const data = (await getData())[4];
 	const legend = document.querySelector('.chart-legend');
 
 	const legendButtons = makeLegendButtons(data);
@@ -77,7 +77,7 @@ const main = async () => {
 
 		const _prevTs = prevTs || ts;
 		prevTs = ts;
-		delta = Math.min(100.0, ts - _prevTs);
+		delta = Math.min(16.0, ts - _prevTs);
 
 		if (chartViewConfig.shouldUpdate) {
 			// canvas.width = calculateCanvasWidth(900, chartViewConfig.viewport);
@@ -196,7 +196,7 @@ const wrapLegendButton = (checkbox, labelText, color) => {
 };
 
 let lastMultiplier = 0;
-let lastLowerBorder = 0;
+let lastLowerBorder = null;
 let lastLengthSet;
 var [gbT, forceUpdate] = rafThrottle(getBorders, 250);
 
@@ -238,8 +238,6 @@ const draw = (canvas, chartData, viewport) => {
 	const chartHeight = height - labelsOffset;
 	const chartWidth = width;
 	const xColumn = settings.data.xColumn;
-
-	console.log(start, end)
 
 	const dates = chartData.columns
 		.find(c => c[0] === xColumn)
@@ -286,13 +284,14 @@ const draw = (canvas, chartData, viewport) => {
 
 	const lowerBorder = getLowerBorder(maxPoint, minPoint, 0);
 
-	if (!lastLowerBorder) {
+	if (lastLowerBorder == null) {
 		lastLowerBorder = lowerBorder;
 	} else {
 		const p = 0.004 * delta;
 		const diff = lowerBorder - lastLowerBorder;
+		console.log(diff);
 		lastLowerBorder = lastLowerBorder + p * diff;
-		lastLowerBorder = Math.abs(diff) < Number.EPSILON ? lowerBorder : lastLowerBorder + p * diff;
+		lastLowerBorder = lastLowerBorder + p * diff // Math.abs(diff) < Number.EPSILON ? lowerBorder : lastLowerBorder + p * diff;
 	}
 
 	const multiplier = getZoomRatio(chartHeight, maxPoint - lowerBorder);
@@ -303,7 +302,8 @@ const draw = (canvas, chartData, viewport) => {
 	} else {
 		const p = 0.008 * delta;
 		const diff = multiplier - lastMultiplier;
-		lastMultiplier = Math.abs(diff) < Number.EPSILON ? multiplier : lastMultiplier + p * diff;
+		console.log('multiplier',diff);
+		lastMultiplier = lastMultiplier + p * diff; // Math.abs(diff) < Number.EPSILON ? multiplier : lastMultiplier + p * diff;
 	}
 
 	// drawing

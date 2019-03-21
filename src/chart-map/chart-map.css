@@ -1,0 +1,44 @@
+
+.chart-map__canvas {
+    width: 100%;
+    height: 100px;
+}
+
+.chart-map__wrap {
+    width: 100%;
+    height: 100px;
+    position: relative;
+
+    background-clip: padding-box;
+    overflow: hidden;
+}
+
+
+.chart-map__slider {
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: 100px;
+    height: 100%;
+    /* Dirty hack for overlay canvas */
+    box-shadow: 0 20px 20px 9999px #e0e2e466;
+    border-top: 2px solid #bacde073;
+    border-bottom: 2px solid #bacde073;
+}
+
+.chart-map__hand {
+    width: 10px;
+    height: 100%;
+    background-color: #bacde073;
+    position: absolute;
+    top: 0;
+}
+
+.chart-map__left-hand {
+    left: 0;
+}
+
+.chart-map__right-hand {
+    left: 100%;
+    transform: translate(-100%);
+}

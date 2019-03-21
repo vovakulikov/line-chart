@@ -47,7 +47,6 @@ const ctx = canvas.getContext('2d');
 const MIN_WIDTH_VIEWPORT = 40;
 
 function getMax(getProp) {
-
     return Math.max(
         ...chartData
             .map(chart => Math.max(...chart.points.map(getProp)))
@@ -55,7 +54,6 @@ function getMax(getProp) {
 }
 
 function getMin(getProp) {
-
     return Math.min(
         ...chartData
             .map(chart => Math.min(...chart.points.map(getProp)))
@@ -69,9 +67,6 @@ const minY = getMin((point) => point.y);
 
 const ratioY = height / maxY;
 const ratioX = width / (maxX - minX);
-
-
-console.log(minX, maxX, minY, maxY);
 
 function drawChart(ctx, { canvasHeight, ratioY, ratioX, dataset }) {
     const { points, color } = dataset;

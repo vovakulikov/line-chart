@@ -3,7 +3,6 @@ import {
 	formatDate,
 	rafThrottle,
 	hexToRGB,
-	getDimension,
 	getLabelWidth,
 	getZoomRatio,
 	getViewportX,
@@ -56,7 +55,7 @@ const scrollToViewport = (canvas, containerWidth, {start, end}) => {
 
 
 const main = async () => {
-	const data = (await getData())[4];
+	const data = (await getData())[1];
 	const legend = document.querySelector('.chart-legend');
 
 	const legendButtons = makeLegendButtons(data);
@@ -469,7 +468,7 @@ const drawGrid = (ctx, {
 	const newLabelsX = [];
 	let step = globalStep;
 
-	while (step > globalStep * 1.618 * (viewport.end - viewport.start)) {
+	while (step > globalStep * 1.68 * (viewport.end - viewport.start)) {
 		step = step / 2;
 	}
 
@@ -553,6 +552,7 @@ const drawChart = (ctx, {zoomRatioX, lowerBorder, dates, opacity, chartWidth, ch
 
 	// drawing
 	ctx.save();
+	ctx.lineJoin = 'round';
 	ctx.beginPath();
 	ctx.moveTo(0, curY);
 	ctx.strokeStyle = updatedColor;

@@ -1,6 +1,6 @@
 
 // [VK] TODO Add description of this function
-export const rafThrottle = function t(f, time) {
+export default function rafThrottle(f, time) {
 	let lastCallTime = performance.now();
 	let lastArgs;
 	let lastResult;

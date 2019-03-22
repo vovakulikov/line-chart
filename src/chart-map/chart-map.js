@@ -1,8 +1,12 @@
 import hexToRGB from '../utils/hex-to-rgb.js';
 import getCoords from '../utils/get-coords.js';
-import getMinMaxRange from '../utils/get-min-max-range';
+import getMinMaxRange from '../utils/get-min-max-range.js';
 
 const MIN_WIDTH_VIEWPORT = 40;
+
+function getTranslateValue(transform) {
+	return +transform.replace(/[^\d.]/g, '');
+}
 
 class ChartMap {
 
@@ -25,6 +29,7 @@ class ChartMap {
 
 	// const config = {
 	// 	timeline: data.columns[0].slice(1),
+	//  viewport: { start: 0.7, end: 1.0 }
 	// 	datasets: [
 	// 		{
 	// 			values: data.columns[1].slice(1),
@@ -42,6 +47,7 @@ class ChartMap {
 		this.rootElement = rootElement;
 		this.config = config;
 		this.timeline = this.config.timeline || [];
+		this.viewport = this.config.viewport || {};
 		this.datasets = null;
 		this.canvas = null;
 		this.sliderElement = null;
@@ -71,6 +77,9 @@ class ChartMap {
 		this.canvas.width = this.canvasSize.width;
 		this.canvas.height = this.canvasSize.height;
 
+		this.sliderElement.style.width = `${(this.viewport.end - this.viewport.start) * this.canvasSize.width}px`;
+		this.sliderElement.style.transform = `translateX(${this.viewport.start * this.canvasSize.width}px)`;
+
 		[this.minY, this.maxY] = getMinMaxRange(this.config.datasets);
 
 		this.ratioY = this.canvasSize.height / (this.maxY - this.minY);
@@ -99,16 +108,30 @@ class ChartMap {
 		this.subscribers.push(callback);
 	}
 
-	fireChangeViewportEvent() {
-		this.subscribers.forEach((callback) => callback());
+	fireChangeViewportEvent(event) {
+		const { nextOffset, nextWidth } = event;
+		const nextViewport = {
+			start: Math.max(0, nextOffset / this.canvasSize.width),
+			end: Math.min(1, (nextOffset + nextWidth) / this.canvasSize.width)
+		};
+
+		this.subscribers.forEach((callback) => callback(nextViewport));
 	}
 
-	turnOffDataset(name) {
+	toggleDataset({ id, checked }) {
+		if (checked) {
+			this.turnOnDataset(id);
+		} else {
+			this.turnOffDataset(id);
+		}
+	}
+
+	turnOffDataset(id) {
 		const stayOnDatasets = [];
 		this.shouldRender = true;
 
 		for (let i = 0; i < this.datasets.length; i++) {
-			if (this.datasets[i].name === name) {
+			if (this.datasets[i].id === id) {
 				this.datasets[i].targetOpacity = 0;
 			} else {
 				stayOnDatasets.push(this.datasets[i]);
@@ -124,7 +147,7 @@ class ChartMap {
 		}
 	}
 
-	turnOnDataset(name) {
+	turnOnDataset(id) {
 
 		[this.minY, this.maxY] = getMinMaxRange(this.datasets);
 		this.shouldRender = true;
@@ -132,7 +155,7 @@ class ChartMap {
 		const newRatioY = this.canvasSize.height / (this.maxY - this.minY);
 
 		for (let i = 0; i < this.datasets.length; i++) {
-			if (this.datasets[i].name === name) {
+			if (this.datasets[i].id === id) {
 				this.datasets[i].targetOpacity = 1;
 				this.datasets[i].ratioY = newRatioY;
 			}
@@ -208,6 +231,7 @@ class ChartMap {
 		const originEventX = event.pageX;
 		const leftShift = event.pageX - coords.left;
 		const rightShift = coords.right - event.pageX;
+		const width = this.sliderElement.clientWidth;
 
 		const move = (event) => {
 			event.stopImmediatePropagation();
@@ -217,20 +241,29 @@ class ChartMap {
 
 			if ((event.pageX - leftShift) < wrapCoords.left) {
 				this.sliderElement.style.transform =`translateX(${0}px)`;
-				// updateViewConfig(getTranslateValue(slider.style.transform), slider.clientWidth);
+				this.fireChangeViewportEvent({
+					nextOffset: 0,
+					nextWidth: width
+				});
 
 				return;
 			}
 
 			if ((event.pageX + rightShift) > wrapCoords.right ){
 				this.sliderElement.style.transform =`translateX(${wrapCoords.width - coords.width}px)`;
-				// updateViewConfig(getTranslateValue(slider.style.transform), slider.clientWidth);
+				this.fireChangeViewportEvent({
+					nextOffset: wrapCoords.width - coords.width,
+					nextWidth: width
+				});
 
 				return;
 			}
 
 			this.sliderElement.style.transform =`translateX(${startX + delta}px)`;
-			// updateViewConfig(getTranslateValue(slider.style.transform), slider.clientWidth);
+			this.fireChangeViewportEvent({
+				nextOffset: startX + delta,
+				nextWidth: width
+			});
 		};
 
 		function cleanUp() {
@@ -250,6 +283,7 @@ class ChartMap {
 		const sliderCoords = getCoords(this.sliderElement);
 		const originEventX = event.pageX;
 		const originWidth = this.sliderElement.clientWidth;
+		const offset = getTranslateValue(this.sliderElement.style.transform);
 
 		const changeWidth = (event) => {
 			event.stopImmediatePropagation();
@@ -260,20 +294,29 @@ class ChartMap {
 
 			if (newWidth < MIN_WIDTH_VIEWPORT) {
 				this.sliderElement.style.width = `${MIN_WIDTH_VIEWPORT}px`;
-				// updateViewConfig(getTranslateValue(slider.style.transform), slider.clientWidth);
+				this.fireChangeViewportEvent({
+					nextOffset: offset,
+					nextWidth: MIN_WIDTH_VIEWPORT
+				});
 
 				return;
 			}
 
 			if ((newWidth + (sliderCoords.left - wrapCoords.left)) >= (wrapCoords.right - wrapCoords.left)) {
 				this.sliderElement.style.width = `${wrapCoords.right - sliderCoords.left}px`;
-				// updateViewConfig(getTranslateValue(slider.style.transform), slider.clientWidth);
+				this.fireChangeViewportEvent({
+					nextOffset: offset,
+					nextWidth: wrapCoords.right - sliderCoords.left
+				});
 
 				return;
 			}
 
 			this.sliderElement.style.width = `${originWidth + delta}px`;
-			// updateViewConfig(getTranslateValue(slider.style.transform), slider.clientWidth);
+			this.fireChangeViewportEvent({
+				nextOffset: offset,
+				nextWidth: originWidth + delta
+			});
 		};
 
 		function cleanUp() {
@@ -305,12 +348,12 @@ class ChartMap {
 			const newWidth = originWidth + -1 * delta;
 
 			if (newWidth < MIN_WIDTH_VIEWPORT) {
-				const nextOfsset = sliderCoords.right - wrapCoords.left - MIN_WIDTH_VIEWPORT;
+				const nextOffset = sliderCoords.right - wrapCoords.left - MIN_WIDTH_VIEWPORT;
 				const nextWidth = MIN_WIDTH_VIEWPORT;
 
 				this.sliderElement.style.width = `${nextWidth}px`;
-				this.sliderElement.style.transform =`translateX(${nextOfsset}px)`;
-				this.fireChangeViewportEvent(nextOfsset, nextWidth);
+				this.sliderElement.style.transform =`translateX(${nextOffset}px)`;
+				this.fireChangeViewportEvent({ nextOffset, nextWidth });
 
 				return;
 			}
@@ -320,14 +363,14 @@ class ChartMap {
 
 				this.sliderElement.style.width = `${sliderCoords.right - wrapCoords.left}px`;
 				this.sliderElement.style.transform =`translateX(0px)`;
-				this.fireChangeViewportEvent(0, nextWidth);
+				this.fireChangeViewportEvent({ nextOffset: 0, nextWidth });
 
 				return;
 			}
 
 			this.sliderElement.style.width = `${newWidth}px`;
 			this.sliderElement.style.transform =`translateX(${startX + delta}px)`;
-			this.fireChangeViewportEvent(startX + delta, newWidth);
+			this.fireChangeViewportEvent({ nextOffset: startX + delta, nextWidth: newWidth});
 		};
 
 		function cleanUp() {

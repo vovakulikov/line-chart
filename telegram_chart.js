@@ -56,7 +56,7 @@ const scrollToViewport = (canvas, containerWidth, {start, end}) => {
 
 
 const main = async () => {
-	const data = (await getData())[1];
+	const data = (await getData())[0];
 	const legend = document.querySelector('.chart-legend');
 
 	const legendButtons = makeLegendButtons(data);
@@ -291,7 +291,7 @@ const draw = (canvas, chartData, viewport) => {
 		const diff = lowerBorder - lastLowerBorder;
 
 		lastLowerBorder = lastLowerBorder + p * diff;
-		lastLowerBorder = lastLowerBorder + p * diff // Math.abs(diff) < Number.EPSILON ? lowerBorder : lastLowerBorder + p * diff;
+		// Math.abs(diff) < Number.EPSILON ? lowerBorder : lastLowerBorder + p * diff;
 	}
 
 	const multiplier = getZoomRatio(chartHeight, maxPoint - lowerBorder);
@@ -423,8 +423,6 @@ const drawGrid = (ctx, {
 		}
 	});
 
-	var storeLabels = {};
-
 	newLabels
 		.forEach((label) => {
 			if (labelsY.entities[label.currentValue]) {
@@ -434,8 +432,6 @@ const drawGrid = (ctx, {
 				labelsY.add(label, 'currentValue');
 			}
 		});
-
-	var lastDrawLineValue = 0;
 
 	labelsY.getValues().forEach((label) => {
 		const height = chartHeight - (multiplier * label.currentValue) + (lowerBorder * multiplier);
@@ -455,9 +451,6 @@ const drawGrid = (ctx, {
 		ctx.stroke();
 
 		ctx.restore();
-
-		storeLabels[(Math.floor(label.value))] = true;
-		lastDrawLineValue = label.value;
 	});
 
 	ctx.lineWidth = settings.grid.xLineWidth;

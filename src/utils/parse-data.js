@@ -13,11 +13,10 @@
 // }
 //
 
-export function parseData(json) {
+export default function parseData(parsedData) {
 	const TIMELINE_TYPE = 'x';
 
 	try {
-		const parsedData = JSON.parse(json);
 
 		return parsedData.map(chartData => {
 			const types = chartData.types || {};
@@ -38,10 +37,14 @@ export function parseData(json) {
 					return memo;
 				}
 
-				memo.datasets[columnName] = columnDataset;
+				memo.datasets.push({
+					values: columnDataset,
+					id: columnName,
+					color: colors[columnName]
+				});
 
 				return memo;
-			}, { datasets: {}, timeline: [] });
+			}, { datasets: [], timeline: [] });
 
 			return {
 				types,

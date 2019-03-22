@@ -1,28 +1,48 @@
 import hexToRGB from '../utils/hex-to-rgb.js';
 import getCoords from '../utils/get-coords.js';
+import getMinMaxRange from '../utils/get-min-max-range';
 
 const MIN_WIDTH_VIEWPORT = 40;
 
-function getMaxPoint(datasets) {
-	const allValues = datasets
-		.reduce((values, dataset) => values.concat(dataset.values), []);
-
-	return Math.max.apply(null, allValues);
-}
-
-function getMinPoint(datasets) {
-	const allValues = Object.values(datasets)
-		.reduce((values, dataset) => values.concat(dataset.values), []);
-
-	return Math.min.apply(null, allValues);
-}
-
 class ChartMap {
+
+	static getTemplate() {
+		return `
+			<div class="chart-map__wrap">
+				<canvas 
+					class="chart-map__canvas">
+				</canvas>
+
+				<div class="chart-map__slider">
+					<div class="chart-map__hand chart-map__left-hand"></div>
+					<div class="chart-map__hand chart-map__right-hand"></div>
+				</div>
+      </div>
+		`;
+	}
+
+	// Config should has shape like object below
+
+	// const config = {
+	// 	timeline: data.columns[0].slice(1),
+	// 	datasets: [
+	// 		{
+	// 			values: data.columns[1].slice(1),
+	// 			name: 'y0',
+	// 			color: '#3DC23F'
+	// 		},
+	// 		{
+	// 			values: data.columns[2].slice(1),
+	// 			name: 'y1',
+	// 			color: '#F34C44'
+	// 		}
+	// 	]
+	// };
 	constructor({ rootElement, config }) {
 		this.rootElement = rootElement;
 		this.config = config;
 		this.timeline = this.config.timeline || [];
-		this.datasets = null; // config.datasets || {};
+		this.datasets = null;
 		this.canvas = null;
 		this.sliderElement = null;
 		this.leftHandElement = null;
@@ -31,6 +51,8 @@ class ChartMap {
 		this.ctx = null;
 		this.ratioY = null;
 		this.ratioX = null;
+		this.prevTs = null;
+		this.shouldRender = true;
 		this.subscribers = [];
 
 		this.maxY = 0;
@@ -40,17 +62,16 @@ class ChartMap {
 	init() {
 		this.rootElement.insertAdjacentHTML('beforeend', ChartMap.getTemplate());
 		this.canvas = this.rootElement.querySelector('.chart-map__canvas');
+		this.ctx = this.canvas.getContext('2d');
 		this.sliderElement = this.rootElement.querySelector('.chart-map__slider');
 		this.leftHandElement = this.rootElement.querySelector('.chart-map__left-hand');
 		this.rightHandElement = this.rootElement.querySelector('.chart-map__right-hand');
-		this.ctx = this.canvas.getContext('2d');
 		this.canvasSize = this.canvas.getBoundingClientRect();
 
 		this.canvas.width = this.canvasSize.width;
 		this.canvas.height = this.canvasSize.height;
 
-		this.maxY = getMaxPoint(this.config.datasets);
-		this.minY = getMinPoint(this.config.datasets);
+		[this.minY, this.maxY] = getMinMaxRange(this.config.datasets);
 
 		this.ratioY = this.canvasSize.height / (this.maxY - this.minY);
 		this.ratioX = this.canvasSize.width / (this.timeline[this.timeline.length - 1] - this.timeline[0]);
@@ -74,7 +95,7 @@ class ChartMap {
 		this.rightHandElement.addEventListener('touchstart', (event) => this.rightHandTouchHandle(event));
 	};
 
-	sibscribe(callback) {
+	subscribe(callback) {
 		this.subscribers.push(callback);
 	}
 
@@ -83,29 +104,30 @@ class ChartMap {
 	}
 
 	turnOffDataset(name) {
-		var stayDatasets = [];
+		const stayOnDatasets = [];
+		this.shouldRender = true;
 
 		for (let i = 0; i < this.datasets.length; i++) {
 			if (this.datasets[i].name === name) {
 				this.datasets[i].targetOpacity = 0;
 			} else {
-				stayDatasets.push(this.datasets[i]);
+				stayOnDatasets.push(this.datasets[i]);
 			}
 		}
 
-		this.maxY = getMaxPoint(stayDatasets);
-		this.minY = getMinPoint(stayDatasets);
+		[this.minY, this.maxY] = getMinMaxRange(stayOnDatasets);
 
 		const newRatioY = this.canvasSize.height / (this.maxY - this.minY);
 
-		for (let i = 0; i < stayDatasets.length; i++) {
-			stayDatasets[i].targetRatioY = newRatioY;
+		for (let i = 0; i < stayOnDatasets.length; i++) {
+			stayOnDatasets[i].targetRatioY = newRatioY;
 		}
 	}
 
 	turnOnDataset(name) {
-		this.maxY = getMaxPoint(this.datasets);
-		this.minY = getMinPoint(this.datasets);
+
+		[this.minY, this.maxY] = getMinMaxRange(this.datasets);
+		this.shouldRender = true;
 
 		const newRatioY = this.canvasSize.height / (this.maxY - this.minY);
 
@@ -120,26 +142,40 @@ class ChartMap {
 	}
 
 	update(ts) {
+		if (!this.shouldRender) {
+			return;
+		}
+
 		const prevTs = this.prevTs || ts;
 		const delta = Math.min(50, ts - prevTs);
-		const k = 0.008 * delta;
+
 		// update prev timestamp
 		this.prevTs = ts;
+
+		const k = 0.008 * delta;
+		let shouldRenderOnNextTick = false;
 
 		// update datasets params
 		for (let i = 0; i < this.datasets.length; i++) {
 			const opacityDiff = this.datasets[i].targetOpacity - this.datasets[i].opacity;
 			const ratioYDiff = this.datasets[i].targetRatioY - this.datasets[i].ratioY;
 
-			this.datasets[i].opacity = Math.abs(opacityDiff) < Number.EPSILON
-				? this.datasets[i].targetOpacity
-				: this.datasets[i].opacity + k * opacityDiff;
+			if (Math.abs(opacityDiff) < Number.EPSILON) {
+				this.datasets[i].opacity = this.datasets[i].targetOpacity;
+			} else {
+				this.datasets[i].opacity += k * opacityDiff;
+				shouldRenderOnNextTick = true;
+			}
 
-			this.datasets[i].ratioY = Math.abs(ratioYDiff) < Number.EPSILON
-				? this.datasets[i].targetRatioY
-				: this.datasets[i].ratioY + k * ratioYDiff;
+			if (Math.abs(ratioYDiff) < Number.EPSILON) {
+				this.datasets[i].ratioY = this.datasets[i].targetRatioY;
+			} else {
+				this.datasets[i].ratioY += k * ratioYDiff;
+				shouldRenderOnNextTick = true;
+			}
 		}
 
+		this.shouldRender = shouldRenderOnNextTick;
 		this.ctx.clearRect(0, 0, this.canvasSize.width, this.canvasSize.height);
 		this.datasets.forEach((dataset) => this.drawChart(dataset));
 	}
@@ -161,21 +197,6 @@ class ChartMap {
 
 		this.ctx.stroke();
 		this.ctx.restore();
-	}
-
-	static getTemplate() {
-		return `
-			<div class="chart-map__wrap">
-				<canvas 
-					class="chart-map__canvas">
-				</canvas>
-
-				<div class="chart-map__slider">
-					<div class="chart-map__hand chart-map__left-hand"></div>
-					<div class="chart-map__hand chart-map__right-hand"></div>
-				</div>
-      </div>
-		`;
 	}
 
 	sliderTouchHandle(event) {
@@ -276,7 +297,6 @@ class ChartMap {
 		const originWidth = this.sliderElement.clientWidth;
 		const leftShiftX = event.pageX - sliderCoords.left;
 
-
 		const changeWidth = (event) => {
 			event.stopImmediatePropagation();
 			event = event.touches[0];
@@ -296,16 +316,18 @@ class ChartMap {
 			}
 
 			if ((event.pageX - leftShiftX) <= wrapCoords.left) {
+				const nextWidth = sliderCoords.right - wrapCoords.left;
+
 				this.sliderElement.style.width = `${sliderCoords.right - wrapCoords.left}px`;
 				this.sliderElement.style.transform =`translateX(0px)`;
-				// updateViewConfig(getTranslateValue(slider.style.transform), slider.clientWidth);
+				this.fireChangeViewportEvent(0, nextWidth);
 
 				return;
 			}
 
-			this.sliderElement.style.transform =`translateX(${startX + delta}px)`;
 			this.sliderElement.style.width = `${newWidth}px`;
-			// updateViewConfig(getTranslateValue(slider.style.transform), slider.clientWidth);
+			this.sliderElement.style.transform =`translateX(${startX + delta}px)`;
+			this.fireChangeViewportEvent(startX + delta, newWidth);
 		};
 
 		function cleanUp() {

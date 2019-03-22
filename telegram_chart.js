@@ -1,4 +1,5 @@
-import {chartData} from './chart_data.js';
+import chartData from './chart_data.js';
+
 import {
 	formatDate,
 	rafThrottle,
@@ -288,7 +289,7 @@ const draw = (canvas, chartData, viewport) => {
 	} else {
 		const p = 0.004 * delta;
 		const diff = lowerBorder - lastLowerBorder;
-		console.log(diff);
+
 		lastLowerBorder = lastLowerBorder + p * diff;
 		lastLowerBorder = lastLowerBorder + p * diff // Math.abs(diff) < Number.EPSILON ? lowerBorder : lastLowerBorder + p * diff;
 	}

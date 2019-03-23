@@ -151,11 +151,12 @@ class Chart {
 
 		this.map.init();
 		this.map.subscribe((nextViewport) => {
+			this.viewport.start = nextViewport.start;
+			this.viewport.end = nextViewport.end;
+
 			const tooltipX = this.getAbsoluteXCoordinate(this.selectedPointX, this.virtualWidth, this.offsetX);
 
 			this.tooltip.updateTooltipPosition(tooltipX, 25, this.datasetsCanvas.width + 25);
-			this.viewport.start = nextViewport.start;
-			this.viewport.end = nextViewport.end;
 			this.shouldRerenderDatasets = true;
 		});
 
@@ -275,6 +276,8 @@ class Chart {
 				this.drawChart(dataset, this.lastRatioY, ratioX);
 
 				if (this.selectedPointIndex && dataset.targetOpacity !== 0) {
+					this.selectedPointX = (this.timeline[this.selectedPointIndex] - this.timeline[0]) * this.lastRatioX;
+
 					this.drawSelectedPoint(
 						this.selectedPointX,
 						this.getRelativeY(chartHeight, dataset.values[this.selectedPointIndex], this.lastRatioY),

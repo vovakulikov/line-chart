@@ -2,7 +2,8 @@ import formatDate from '../utils/format-date.js';
 import hexToRGB from '../utils/hex-to-rgb.js';
 import rafThrottle from '../utils/raf-throttle.js';
 import ChartMap from '../chart-map/chart-map.js';
-import ChartLegend from "../legend/chart-legend.js";
+import ChartLegend from '../legend/chart-legend.js';
+import Tooltip from '../tooltip/tooltip.js';
 
 const LABEL_OFFSET = 60;
 const TOP_OFFSET = 40;
@@ -51,6 +52,8 @@ class Chart {
 				
 				<div class="chart__map"></div>
 				<div class="chart__legend chart-legend"></div>
+				
+				<div class="selected-tooltip"></div>
 			</section>
 		`;
 	}
@@ -85,6 +88,8 @@ class Chart {
 		this.map = null;
 		this.legend = null;
 		this.legendRootElement = null;
+		this.tooltip = null;
+		this.tooltipRootElement = null;
 
 		this.canvasSize = null;
 		this.virtualWidth = null;
@@ -100,6 +105,9 @@ class Chart {
 		this.lastRatioX = null;
 		this.lastLowerBorder = null;
 		this.shouldRerenderDatasets = true;
+		this.selectedPointIndex = null;
+		this.selectedPointX = null;
+		this.isNightMode = false;
 
 		this.labelsY = {};
 		this.labelsX = {};
@@ -111,6 +119,7 @@ class Chart {
 		this.rootElement.insertAdjacentHTML('beforeend', this.getTemplate());
 		this.mapRootElement = this.rootElement.querySelector('.chart__map');
 		this.legendRootElement = this.rootElement.querySelector('.chart__legend');
+		this.tooltipRootElement = this.rootElement.querySelector('.selected-tooltip');
 
 		this.map = new ChartMap({
 			rootElement: this.mapRootElement,
@@ -142,6 +151,9 @@ class Chart {
 
 		this.map.init();
 		this.map.subscribe((nextViewport) => {
+			const tooltipX = this.getAbsoluteXCoordinate(this.selectedPointX, this.virtualWidth, this.offsetX);
+
+			this.tooltip.updateTooltipPosition(tooltipX, 25, this.datasetsCanvas.width + 25);
 			this.viewport.start = nextViewport.start;
 			this.viewport.end = nextViewport.end;
 			this.shouldRerenderDatasets = true;
@@ -149,7 +161,18 @@ class Chart {
 
 		this.legend = new ChartLegend(this.legendRootElement, this.config);
 		this.legend.init();
-		this.legend.subscribe((event) => this.toggleActiveDatasets(event));
+		this.legend.subscribe((event) => {
+			this.toggleActiveDatasets(event);
+
+			const idx = this.selectedPointIndex;
+			const datasets = this.datasets.filter(d => d.targetOpacity !== 0);
+			this.tooltip.updateTooltipData(this.timeline[idx], this.getSelectedPointsData(datasets, idx));
+		});
+
+		this.tooltip = new Tooltip(this.tooltipRootElement);
+		this.tooltip.init();
+
+		this.addEventListeners();
 
 		requestAnimationFrame((ts) => this.update(ts));
 	}
@@ -248,15 +271,21 @@ class Chart {
 			this.datasetsCtx.setTransform(1, 0, 0, 1, this.offsetX, 0);
 			this.datasetsCtx.clearRect(0, 0, this.virtualWidth, this.canvasSize.height);
 
-			for (let i = 0; i < this.datasets.length; i++) {
-				if (+this.datasets[i].opacity.toFixed(2) > 0) {
-					this.drawChart(this.datasets[i], this.lastRatioY, ratioX);
+			this.getRenderedDatasets().forEach(dataset => {
+				this.drawChart(dataset, this.lastRatioY, ratioX);
+
+				if (this.selectedPointIndex && dataset.targetOpacity !== 0) {
+					this.drawSelectedPoint(
+						this.selectedPointX,
+						this.getRelativeY(chartHeight, dataset.values[this.selectedPointIndex], this.lastRatioY),
+						dataset.color
+					);
 				}
-			}
+			});
 
 			this.shouldRerenderDatasets = false;
 		} else {
-			console.log('no rerender dataset!!!!')
+			// console.log('no rerender dataset!!!!')
 		}
 
 		this.map.update(ts);
@@ -442,6 +471,28 @@ class Chart {
 		this.datasetsCtx.restore();
 	}
 
+	getRelativeY(chartHeight, value, ratioY) {
+		return chartHeight - (value - this.lastLowerBorder) * ratioY;
+	}
+
+	drawSelectedPoint(x, y, color) {
+		const r = 6.0;
+
+		this.datasetsCtx.save();
+		this.datasetsCtx.beginPath();
+		this.datasetsCtx.strokeStyle = color;
+		this.datasetsCtx.lineWidth = 6.0;
+		this.datasetsCtx.fillStyle = this.isNightMode
+			? '#017'
+			: '#fff';
+
+		this.datasetsCtx.arc(x - r + 5, y - r + 5, r, 0, Math.PI * 2);
+
+		this.datasetsCtx.stroke();
+		this.datasetsCtx.fill();
+		this.datasetsCtx.restore();
+	}
+
 	getVerticalBorders(datasets, startDate, dueDate) {
 		let minValue = Infinity;
 		let maxValue = -Infinity;
@@ -462,6 +513,45 @@ class Chart {
 		}
 
 		return [Math.floor(minValue * 0.99 * 1000) / 1000, Math.floor(maxValue * 1.01 * 1000) / 1000];
+	}
+
+	addEventListeners() {
+		this.labelsCanvas.addEventListener('touchstart', event => {
+			const x = event.touches[0].clientX;
+			const virtualX = this.getRelativeXCoordinate(x, this.virtualWidth, this.offsetX);
+			const idx = Math.round(virtualX * this.timeline.length / this.virtualWidth) - 1;
+			const pointsData = this.getSelectedPointsData(this.getRenderedDatasets(), idx);
+
+			this.selectedPointIndex = idx;
+			this.selectedPointX = (this.timeline[idx] - this.timeline[0]) * this.lastRatioX;
+			this.tooltip.updateTooltipData(this.timeline[idx], pointsData);
+			this.tooltip.updateTooltipPosition(this.getAbsoluteXCoordinate(this.selectedPointX, this.virtualWidth, this.offsetX));
+
+			this.shouldRerenderDatasets = true;
+			event.preventDefault();
+		});
+	};
+
+	getRenderedDatasets() {
+		return this.datasets.filter(dataset => +dataset.opacity.toFixed(2) > 0);
+	}
+
+	getSelectedPointsData(datasets, idx) {
+		return datasets.map(dataset => {
+			return {
+				color: dataset.color,
+				value: dataset.values[idx],
+				chartName: this.config.names[Object.keys(this.config.names).find(key => key === dataset.id)],
+			}
+		});
+	}
+
+	getRelativeXCoordinate(xCoord, virtualWidth, offsetX) {
+		return xCoord - offsetX - 25;
+	}
+
+	getAbsoluteXCoordinate(xCoord, virtualWidth, offsetX) {
+		return xCoord + offsetX + 25;
 	}
 }
 

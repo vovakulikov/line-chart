@@ -1,36 +1,3 @@
-@import './destyle.css';
-@import './chart-map.css';
-
-body {
-    font-family: sans-serif;
-}
-
-.app-container {
-    padding: 16px 24px 0;
-}
-
-.chart-header {
-    padding: 0 24px;
-    margin-bottom: 12px;
-    font-size: 32px;
-    font-weight: bold;
-}
-
-.chart-container {
-    width: 900px;
-    overflow: hidden;
-}
-
-.chart-legend {
-    margin-top: 16px;
-    display: flex;
-}
-
-.chart-legend__button + .chart-legend__button {
-    margin-left: 24px;
-}
-
-/* Legend button */
 
 .legend-button {
     display: flex;

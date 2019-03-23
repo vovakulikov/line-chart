@@ -1,12 +1,12 @@
 
 .chart-map__canvas {
     width: 100%;
-    height: 100px;
+    height: 100%;
 }
 
 .chart-map__wrap {
     width: 100%;
-    height: 100px;
+    height: 70px;
     position: relative;
     background-clip: padding-box;
     overflow: hidden;

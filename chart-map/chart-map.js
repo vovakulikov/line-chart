@@ -47,7 +47,6 @@ const ctx = canvas.getContext('2d');
 const MIN_WIDTH_VIEWPORT = 40;
 
 function getMax(getProp) {
-
     return Math.max(
         ...chartData
             .map(chart => Math.max(...chart.points.map(getProp)))
@@ -55,7 +54,6 @@ function getMax(getProp) {
 }
 
 function getMin(getProp) {
-
     return Math.min(
         ...chartData
             .map(chart => Math.min(...chart.points.map(getProp)))
@@ -69,9 +67,6 @@ const minY = getMin((point) => point.y);
 
 const ratioY = height / maxY;
 const ratioX = width / (maxX - minX);
-
-
-console.log(minX, maxX, minY, maxY);
 
 function drawChart(ctx, { canvasHeight, ratioY, ratioX, dataset }) {
     const { points, color } = dataset;
@@ -129,12 +124,14 @@ slider.addEventListener('touchstart', (event) => {
 
         if ((event.pageX - leftShift) < wrapCoords.left) {
             slider.style.transform =`translateX(${0}px)`;
+            updateViewConfig(getTranslateValue(slider.style.transform), slider.clientWidth);
 
             return;
         }
 
         if ((event.pageX + rightShift) > wrapCoords.right ){
             slider.style.transform =`translateX(${wrapCoords.width - coords.width}px)`;
+            updateViewConfig(getTranslateValue(slider.style.transform), slider.clientWidth);
 
             return;
         }
@@ -181,6 +178,7 @@ rightHand.addEventListener('touchstart', (event) => {
 
         if (newWidth < MIN_WIDTH_VIEWPORT) {
             slider.style.width = `${MIN_WIDTH_VIEWPORT}px`;
+            updateViewConfig(getTranslateValue(slider.style.transform), slider.clientWidth);
 
             return;
         }
@@ -191,6 +189,7 @@ rightHand.addEventListener('touchstart', (event) => {
 
         if ((newWidth + (sliderCoords.left - wrapCoords.left)) >= (wrapCoords.right - wrapCoords.left)) {
             slider.style.width = `${wrapCoords.right - sliderCoords.left}px`;
+            updateViewConfig(getTranslateValue(slider.style.transform), slider.clientWidth);
 
             return;
         }
@@ -239,6 +238,7 @@ leftHand.addEventListener('touchstart', (event) => {
         if (newWidth < MIN_WIDTH_VIEWPORT) {
             slider.style.width = `${MIN_WIDTH_VIEWPORT}px`;
             slider.style.transform =`translateX(${sliderCoords.right - wrapCoords.left - MIN_WIDTH_VIEWPORT}px)`;
+            updateViewConfig(getTranslateValue(slider.style.transform), slider.clientWidth);
 
             return;
         }
@@ -250,6 +250,7 @@ leftHand.addEventListener('touchstart', (event) => {
         if ((event.pageX - leftShiftX) <= wrapCoords.left) {
             slider.style.width = `${sliderCoords.right - wrapCoords.left}px`;
             slider.style.transform =`translateX(0px)`;
+            updateViewConfig(getTranslateValue(slider.style.transform), slider.clientWidth);
 
             return;
         }

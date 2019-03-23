@@ -8,7 +8,7 @@ export default {
     },
     grid: {
         font: 'Arial',
-        fontSize: 18,
+        fontSize: 22,
         xLineWidth: 1.0,
         yLineWidth: 0.5,
         strokeStyle: 'rgba(0, 0, 0, 0.16)',
@@ -18,7 +18,7 @@ export default {
         sections: 6,
     },
     chart: {
-        lineWidth: 3.0,
+        lineWidth: 4.0,
         dotRadius: 6.0,
         dotLineWidth: 6.0,
         backgroundColor: {

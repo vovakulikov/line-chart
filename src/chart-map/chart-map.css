@@ -18,7 +18,7 @@
     top: 0;
     width: 100px;
     height: 100%;
-    /* Dirty hack for overlay canvas */
+    /* Dirty hack for overlay datasetsCanvas */
     box-shadow: 0 20px 20px 9999px #e0e2e466;
     border-top: 2px solid #bacde073;
     border-bottom: 2px solid #bacde073;

@@ -47,8 +47,8 @@ let virualWidth;
 let virtualLeftTransalte;
 
 const scrollToViewport = (canvas, containerWidth, {start, end}) => {
-	// canvas.width = calculateCanvasWidth(containerWidth, {start, end});
-	// canvas.style.transform = `translateX(${getViewportX(canvas.width, start)}px)`;
+	// datasetsCanvas.width = calculateCanvasWidth(containerWidth, {start, end});
+	// datasetsCanvas.style.transform = `translateX(${getViewportX(datasetsCanvas.width, start)}px)`;
 
 	virualWidth = calculateCanvasWidth(containerWidth, {start, end});
 	virtualLeftTransalte = getViewportX(virualWidth, start);
@@ -66,7 +66,7 @@ const main = async () => {
 	});
 
 	initState(data);
-	// canvas.width = calculateCanvasWidth(chartContainer.clientWidth, chartViewConfig.viewport);
+	// datasetsCanvas.width = calculateCanvasWidth(chartContainer.clientWidth, chartViewConfig.viewport);
 	virualWidth = calculateCanvasWidth(chartContainer.clientWidth, chartViewConfig.viewport);
 
 	addScrollingListeners(canvas, chartContainer);
@@ -80,7 +80,7 @@ const main = async () => {
 		delta = Math.min(16.0, ts - _prevTs);
 
 		if (chartViewConfig.shouldUpdate) {
-			// canvas.width = calculateCanvasWidth(900, chartViewConfig.viewport);
+			// datasetsCanvas.width = calculateCanvasWidth(900, chartViewConfig.viewport);
 			virualWidth = calculateCanvasWidth(900, chartViewConfig.viewport);
 		}
 
@@ -129,7 +129,7 @@ const addScrollingListeners = (canvas, chartContainer) => {
 			lastX = x;
 			offsetLeft = Math.max(-(virualWidth - chartContainer.clientWidth), Math.min(offsetLeft + delta, 0));
 
-			// canvas.style.transform = `matrix(1, 0, 0, 1, ${offsetLeft}, 0)`;
+			// datasetsCanvas.style.transform = `matrix(1, 0, 0, 1, ${offsetLeft}, 0)`;
 			virtualLeftTransalte = offsetLeft;
 
 			const viewportOffset = Math.abs(offsetLeft / virualWidth);

@@ -12,6 +12,19 @@ body {
 }
 
 .chart {}
+
+.chart_canvas-wrap {
+    position: relative;
+}
+
+.canvas_for-labels {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+}
+
 .chart__canvas {
     width: 100%;
     height: 750px;

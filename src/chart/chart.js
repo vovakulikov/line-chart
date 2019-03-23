@@ -39,12 +39,14 @@ function getLowerBorder(minY, maxY, lowerBorder) {
 
 class Chart {
 
-	static getTemplate(id = 0) {
+	getTemplate(id = 0) {
 		return `
 			<section class="chart" id="chart-${id}">
+				<div class="chart_canvas-wrap">
 					<canvas
-						class="chart__canvas">
+						class="chart__canvas canvas_for-datasets">
 					</canvas>
+					<canvas class="chart__canvas canvas_for-labels"></canvas>
 				</div>
 				
 				<div class="chart__map"></div>
@@ -52,8 +54,6 @@ class Chart {
 			</section>
 		`;
 	}
-
-	static uid = 0;
 
 	// Config shape
 
@@ -79,8 +79,8 @@ class Chart {
 		this.timeline = this.config.timeline || [];
 		this.datasets = null;
 
-		this.canvas = null;
-		this.ctx = null;
+		this.datasetsCanvas = null;
+		this.datasetsCtx = null;
 		this.mapRootElement = null;
 		this.map = null;
 		this.legend = null;
@@ -89,7 +89,7 @@ class Chart {
 		this.canvasSize = null;
 		this.virtualWidth = null;
 		this.offsetX = null;
-		this.viewport = { start: 0.0, end: 1.0 };
+		this.viewport = { start: 0.5, end: 1.0 };
 
 		this.prevTs = null;
 		this.delta = null;
@@ -97,7 +97,9 @@ class Chart {
 		this.max = 0;
 		this.lowerBorder = 0;
 		this.lastRatioY = null;
+		this.lastRatioX = null;
 		this.lastLowerBorder = null;
+		this.shouldRerenderDatasets = true;
 
 		this.labelsY = {};
 		this.labelsX = {};
@@ -106,24 +108,28 @@ class Chart {
 	}
 
 	init() {
-		this.rootElement.insertAdjacentHTML('beforeend', Chart.getTemplate(Chart.uid));
-		this.currentRootElement = this.rootElement.querySelector(`#chart-${Chart.uid}`);
-		this.mapRootElement = this.currentRootElement.querySelector('.chart__map');
-		this.legendRootElement = this.currentRootElement.querySelector('.chart__legend');
+		this.rootElement.insertAdjacentHTML('beforeend', this.getTemplate());
+		this.mapRootElement = this.rootElement.querySelector('.chart__map');
+		this.legendRootElement = this.rootElement.querySelector('.chart__legend');
 
 		this.map = new ChartMap({
 			rootElement: this.mapRootElement,
 			config: { ...this.config, viewport: this.viewport }
 		});
 
-		this.canvas = this.currentRootElement.querySelector('canvas');
-		this.ctx = this.canvas.getContext('2d');
-		this.canvasSize = this.canvas.getBoundingClientRect();
+		this.datasetsCanvas = this.rootElement.querySelector('.canvas_for-datasets');
+		this.labelsCanvas = this.rootElement.querySelector('.canvas_for-labels');
+		this.datasetsCtx = this.datasetsCanvas.getContext('2d');
+		this.labelsCtx = this.labelsCanvas.getContext('2d');
+		this.canvasSize = this.datasetsCanvas.getBoundingClientRect();
 
-		this.canvas.width = this.canvasSize.width;
-		this.canvas.height = this.canvasSize.height;
+		this.datasetsCanvas.width = this.canvasSize.width;
+		this.datasetsCanvas.height = this.canvasSize.height;
+		this.labelsCanvas.width = this.canvasSize.width;
+		this.labelsCanvas.height = this.canvasSize.height;
 
 		this.virtualWidth = calculateVirtualWidth(this.canvasSize.width, this.viewport);
+		this.lastRatioX = this.virtualWidth / (this.timeline[this.timeline - 1] - this.timeline[0]);
 		this.offsetX = getViewportOffset(this.virtualWidth, this.viewport.start);
 
 		this.datasets = this.config.datasets
@@ -138,6 +144,7 @@ class Chart {
 		this.map.subscribe((nextViewport) => {
 			this.viewport.start = nextViewport.start;
 			this.viewport.end = nextViewport.end;
+			this.shouldRerenderDatasets = true;
 		});
 
 		this.legend = new ChartLegend(this.legendRootElement, this.config);
@@ -158,7 +165,7 @@ class Chart {
 		this.forceUpdateGVB();
 	}
 
-	forceUpdateGVB = () => {};
+	forceUpdateGVB() {};
 
 	update(ts) {
 		requestAnimationFrame((ts) => this.update(ts));
@@ -177,16 +184,21 @@ class Chart {
 		const diff = this.timeline[this.timeline.length - 1] - this.timeline[0];
 		const startTimestamp = this.timeline[0] + Math.floor(start * diff);
 		const dueTimestamp = this.timeline[0] + Math.floor(end * diff);
-
 		const k = 0.008 * this.delta;
 		let activeDatasets = [];
+		let shouldRerenderDatasets = false;
+		let isLowerBorderChanging = false;
+		let isRatioYChanging = false;
 
 		for(let i = 0; i < this.datasets.length; i++) {
 			const diff = this.datasets[i].targetOpacity - this.datasets[i].opacity;
 
+			// todo add optimization flag
 			this.datasets[i].opacity = Math.abs(diff) < Number.EPSILON
 				? this.datasets[i].targetOpacity
 				: this.datasets[i].opacity + k * diff;
+
+			shouldRerenderDatasets = !Math.abs(diff) < Number.EPSILON || shouldRerenderDatasets;
 
 			if (this.datasets[i].targetOpacity === 1) {
 				activeDatasets.push(this.datasets[i]);
@@ -201,36 +213,50 @@ class Chart {
 		const ratioX = this.virtualWidth / diff;
 
 		if (this.lastLowerBorder != null) {
-			const k = 0.008 * this.delta;
 			const diff = this.lowerBorder - this.lastLowerBorder;
 
+			// todo add optimization flag
 			this.lastLowerBorder = Math.abs(diff) < Number.EPSILON
 				? this.lowerBorder
 				: this.lastLowerBorder + k * diff;
+			isLowerBorderChanging = !Math.abs(diff) < Number.EPSILON;
+
 		} else {
 			this.lastLowerBorder = this.lowerBorder;
 		}
 
 		if (this.lastRatioY != null) {
-			const k = 0.008 * this.delta;
 			const diff = ratioY - this.lastRatioY;
 
+			// todo add optimization flag
 			this.lastRatioY = Math.abs(diff) < Number.EPSILON
 				? ratioY
 				: this.lastRatioY + k * diff;
+
+			isRatioYChanging = !Math.abs(diff) < Number.EPSILON;
 		} else {
 			this.lastRatioY = ratioY;
 		}
 
-		this.ctx.setTransform(1, 0, 0, 1, this.offsetX, 0);
-		this.ctx.clearRect(0, 0, this.virtualWidth, this.canvasSize.height);
+		this.labelsCtx.clearRect(0, 0, this.virtualWidth, this.canvasSize.height);
+		this.labelsCtx.setTransform(1, 0, 0, 1, this.offsetX, 0);
 
 		this.drawGrid(ratioY, ratioX, this.lowerBorder);
 
-		for (let i = 0; i < this.datasets.length; i++) {
-			if (+this.datasets[i].opacity.toFixed(2) > 0) {
-				this.drawChart(this.datasets[i], this.lastRatioY, ratioX);
+		if (shouldRerenderDatasets || this.shouldRerenderDatasets || isRatioYChanging || isLowerBorderChanging) {
+			this.lastRatioX = ratioX;
+			this.datasetsCtx.clearRect(0, 0, this.virtualWidth, this.canvasSize.height);
+			this.datasetsCtx.setTransform(1, 0, 0, 1, this.offsetX, 0);
+
+			for (let i = 0; i < this.datasets.length; i++) {
+				if (+this.datasets[i].opacity.toFixed(2) > 0) {
+					this.drawChart(this.datasets[i], this.lastRatioY, ratioX);
+				}
 			}
+
+			this.shouldRerenderDatasets = false;
+		} else {
+			console.log('no rerender dataset!!!!')
 		}
 
 		this.map.update(ts);
@@ -275,11 +301,11 @@ class Chart {
 			}
 		}
 
-		this.ctx.save();
+		this.labelsCtx.save();
 
-		this.ctx.lineWidth = 0.5;
-		this.ctx.font = `22px Arial`;
-		this.ctx.fillStyle = 'rgba(0, 0, 0, 0.4)';
+		this.labelsCtx.lineWidth = 1;
+		this.labelsCtx.font = `22px Arial`;
+		this.labelsCtx.fillStyle = 'rgba(0, 0, 0, 0.4)';
 
 		for (let key in this.labelsY) {
 			const label = this.labelsY[key];
@@ -290,20 +316,20 @@ class Chart {
 			label.opacity += p * opacityDiff;
 			label.strokeOpacity += ps * strokeOpacityDiff;
 
-			this.ctx.save();
+			this.labelsCtx.save();
 
-			this.ctx.beginPath();
-			this.ctx.moveTo(0, y);
-			this.ctx.lineTo(this.virtualWidth, y);
-			this.ctx.fillStyle = `rgba(0,0,0, ${label.opacity})`;
-			this.ctx.strokeStyle = `rgba(0, 0, 0, ${label.strokeOpacity})`;
-			this.ctx.fillText(Math.floor(label.currentValue), offsetX + 10, y - 6);
-			this.ctx.stroke();
+			this.labelsCtx.beginPath();
+			this.labelsCtx.moveTo(0, +y.toPrecision(4));
+			this.labelsCtx.lineTo(this.virtualWidth, +y.toPrecision(4));
+			this.labelsCtx.fillStyle = `rgba(0,0,0, ${label.opacity.toPrecision(3)})`;
+			this.labelsCtx.strokeStyle = `rgba(0, 0, 0, ${label.strokeOpacity})`;
+			this.labelsCtx.fillText(Math.floor(label.currentValue), offsetX + 10, y - 6);
+			this.labelsCtx.stroke();
 
-			this.ctx.restore();
+			this.labelsCtx.restore();
 		}
 
-		this.ctx.restore();
+		this.labelsCtx.restore();
 	}
 
 	dragXLabels(ratioX) {
@@ -319,7 +345,6 @@ class Chart {
 		}
 
 		while (nextLabelDate < this.timeline[this.timeline.length - 1]) {
-
 			const offset = nextLabelDate === this.timeline[0]
 				? 0
 				: -1 * LABEL_WIDTH / 2;
@@ -346,6 +371,10 @@ class Chart {
 
 		for (let key in this.labelsX) {
 			this.labelsX[key].targetOpacity = 0;
+
+			if (+this.labelsX[key].opacity.toFixed(2) === 0) {
+				delete this.labelsX[key];
+			}
 		}
 
 		for(let i = 0; i < newLabelsX.length; i++) {
@@ -358,29 +387,30 @@ class Chart {
 			}
 		}
 
-		this.ctx.save();
+		this.labelsCtx.save();
 
-		this.ctx.font = `22px Arial`;
-		this.ctx.fillStyle = 'rgba(0, 0, 0, 0.4)';
+		this.labelsCtx.font = `22px Arial`;
+		this.labelsCtx.fillStyle = 'rgba(0, 0, 0, 0.4)';
 
 		for(let key in this.labelsX) {
 			const label = this.labelsX[key];
 			const diff = label.targetOpacity - label.opacity;
 			const x = (label.date - this.timeline[0]) * ratioX + label.offset;
 
+			// todo add optimization flag
 			label.opacity += p * diff;
 
-			this.ctx.save();
+			this.labelsCtx.save();
 
-			this.ctx.beginPath();
-			this.ctx.moveTo(label.x, this.canvasSize.height);
+			this.labelsCtx.beginPath();
+			this.labelsCtx.moveTo(label.x, this.canvasSize.height);
 
-			this.ctx.fillStyle = `rgba(0,0,0, ${label.opacity})`;
-			this.ctx.fillText(label.text, x, this.canvasSize.height - 20);
-			this.ctx.restore();
+			this.labelsCtx.fillStyle = `rgba(0,0,0, ${label.opacity.toPrecision(3)})`;
+			this.labelsCtx.fillText(label.text, x, this.canvasSize.height - 20);
+			this.labelsCtx.restore();
 		}
 
-		this.ctx.restore();
+		this.labelsCtx.restore();
 	}
 
 	drawGrid(ratioY, ratioX, lowerBorder) {
@@ -394,22 +424,22 @@ class Chart {
 		const chartHeight = this.canvasSize.height - LABEL_OFFSET;
 		let y = chartHeight - (dataset.values[0] - this.lastLowerBorder) * ratioY;
 
-		this.ctx.save();
+		this.datasetsCtx.save();
 
-		this.ctx.lineWidth = 4.0;
-		this.ctx.lineJoin = 'round';
-		this.ctx.beginPath();
-		this.ctx.moveTo(0, y);
-		this.ctx.strokeStyle = updatedColor;
+		this.datasetsCtx.lineWidth = 4.0;
+		this.datasetsCtx.lineJoin = 'round';
+		this.datasetsCtx.beginPath();
+		this.datasetsCtx.moveTo(0, y);
+		this.datasetsCtx.strokeStyle = updatedColor;
 
 		for(let i = 0; i < dataset.values.length; i++) {
 			y = chartHeight - (dataset.values[i] - this.lastLowerBorder) * ratioY;
 
-			this.ctx.lineTo((this.timeline[i] - this.timeline[0]) * ratioX, y);
+			this.datasetsCtx.lineTo((this.timeline[i] - this.timeline[0]) * ratioX, y);
 		}
 
-		this.ctx.stroke();
-		this.ctx.restore();
+		this.datasetsCtx.stroke();
+		this.datasetsCtx.restore();
 	}
 
 	getVerticalBorders(datasets, startDate, dueDate) {

@@ -39,6 +39,22 @@ function getLowerBorder(minY, maxY, lowerBorder) {
 		: Math.floor(getLowerBorder(minY, maxY, lowerLine))
 }
 
+function setupCanvas(canvas) {
+	// Get the device pixel ratio, falling back to 1.
+	var dpr = window.devicePixelRatio || 1;
+	// Get the size of the canvas in CSS pixels.
+	var rect = canvas.getBoundingClientRect();
+	// Give the canvas pixel dimensions of their CSS
+	// size * the device pixel ratio.
+	canvas.width = rect.width * dpr;
+	canvas.height = rect.height * dpr;
+	var ctx = canvas.getContext('2d');
+	// Scale all drawing operations by the dpr, so you
+	// don't have to worry about the difference.
+	// ctx.scale(dpr, dpr);
+	return ctx;
+}
+
 class Chart {
 
 	getTemplate(id = 0) {
@@ -130,16 +146,17 @@ class Chart {
 
 		this.datasetsCanvas = this.rootElement.querySelector('.canvas_for-datasets');
 		this.labelsCanvas = this.rootElement.querySelector('.canvas_for-labels');
-		this.datasetsCtx = this.datasetsCanvas.getContext('2d');
-		this.labelsCtx = this.labelsCanvas.getContext('2d');
+		this.datasetsCtx = setupCanvas(this.datasetsCanvas);
+		this.labelsCtx = setupCanvas(this.labelsCanvas);
 		this.canvasSize = this.datasetsCanvas.getBoundingClientRect();
 
-		this.datasetsCanvas.width = this.canvasSize.width;
-		this.datasetsCanvas.height = this.canvasSize.height;
-		this.labelsCanvas.width = this.canvasSize.width;
-		this.labelsCanvas.height = this.canvasSize.height;
+		// this.datasetsCanvas.width = this.canvasSize.width;
+		// this.datasetsCanvas.height = this.canvasSize.height;
+		// this.labelsCanvas.width = this.canvasSize.width;
+		// this.labelsCanvas.height = this.canvasSize.height;
 
 		this.virtualWidth = calculateVirtualWidth(this.canvasSize.width, this.viewport);
+
 		this.lastRatioX = this.virtualWidth / (this.timeline[this.timeline - 1] - this.timeline[0]);
 		this.offsetX = getViewportOffset(this.virtualWidth, this.viewport.start);
 
@@ -275,8 +292,10 @@ class Chart {
 			this.lastRatioY = ratioY;
 		}
 
+
 		if (this.shouldRerenderLabels || isLowerBorderChanging || isRatioYChanging) {
-			this.labelsCtx.setTransform(1, 0, 0, 1, this.offsetX, 0);
+
+			this.labelsCtx.setTransform(2, 0, 0, 2, this.offsetX * 2, 0);
 			this.labelsCtx.clearRect(0, 0, this.virtualWidth, this.canvasSize.height);
 
 			this.drawGrid(ratioY, ratioX, this.lowerBorder);
@@ -287,7 +306,7 @@ class Chart {
 		if (this.shouldRerenderDatasets || shouldRerenderDatasets || isRatioYChanging || isLowerBorderChanging) {
 			this.lastRatioX = ratioX;
 
-			this.datasetsCtx.setTransform(1, 0, 0, 1, this.offsetX, 0);
+			this.datasetsCtx.setTransform(2, 0, 0, 2, this.offsetX * 2, 0);
 			this.datasetsCtx.clearRect(0, 0, this.virtualWidth, this.canvasSize.height);
 
 			for (let i = 0; i < this.datasets.length; i++) {

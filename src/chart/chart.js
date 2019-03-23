@@ -2,15 +2,16 @@ import formatDate from '../utils/format-date.js';
 import hexToRGB from '../utils/hex-to-rgb.js';
 import rafThrottle from '../utils/raf-throttle.js';
 import ChartMap from '../chart-map/chart-map.js';
-import ChartLegend from '../legend/chart-legend.js';
-import Tooltip from '../tooltip/tooltip.js';
+import ChartLegend from "../legend/chart-legend.js";
 
-const LABEL_OFFSET = 60;
+const LABEL_OFFSET = 40;
 const TOP_OFFSET = 40;
 const HORIZONTAL_LINES = 5;
-const VERTICAL_LINES = 5;
+const VERTICAL_LINES = 3;
 const DATE_COEF = 1.68;
-const LABEL_WIDTH = 70;
+
+const PRECISION = 5e-10;
+const LABELS_PRECISION = 5e-3;
 
 function calculateCanvasWidth (containerWidth, {start, end}) {
 	return containerWidth / (end - start);
@@ -52,8 +53,6 @@ class Chart {
 				
 				<div class="chart__map"></div>
 				<div class="chart__legend chart-legend"></div>
-				
-				<div class="selected-tooltip"></div>
 			</section>
 		`;
 	}
@@ -88,8 +87,6 @@ class Chart {
 		this.map = null;
 		this.legend = null;
 		this.legendRootElement = null;
-		this.tooltip = null;
-		this.tooltipRootElement = null;
 
 		this.canvasSize = null;
 		this.virtualWidth = null;
@@ -103,23 +100,28 @@ class Chart {
 		this.lowerBorder = 0;
 		this.lastRatioY = null;
 		this.lastRatioX = null;
+		this.timelineDiff = this.timeline[this.timeline.length - 1] - this.timeline[0];
 		this.lastLowerBorder = null;
+
+		// Optimization flags
 		this.shouldRerenderDatasets = true;
-		this.selectedPointIndex = null;
-		this.selectedPointX = null;
-		this.isNightMode = false;
+		this.shouldRerenderLabels = true;
+		this.isYLabelsAnimating = true;
+		this.isXLabelsAnimating = true;
+		this.rafId = null;
 
 		this.labelsY = {};
 		this.labelsX = {};
 
+		this.composite = false;
+
 		[this.getVerticalBorders, this.forceUpdateGVB] = rafThrottle(this.getVerticalBorders.bind(this), 250)
 	}
 
-	init() {
+	init({ composite = false } = {}) {
 		this.rootElement.insertAdjacentHTML('beforeend', this.getTemplate());
 		this.mapRootElement = this.rootElement.querySelector('.chart__map');
 		this.legendRootElement = this.rootElement.querySelector('.chart__legend');
-		this.tooltipRootElement = this.rootElement.querySelector('.selected-tooltip');
 
 		this.map = new ChartMap({
 			rootElement: this.mapRootElement,
@@ -150,31 +152,28 @@ class Chart {
 			);
 
 		this.map.init();
-		this.map.subscribe((nextViewport) => {
-			const tooltipX = this.getAbsoluteXCoordinate(this.selectedPointX, this.virtualWidth, this.offsetX);
-
-			this.tooltip.updateTooltipPosition(tooltipX, 25, this.datasetsCanvas.width + 25);
-			this.viewport.start = nextViewport.start;
-			this.viewport.end = nextViewport.end;
-			this.shouldRerenderDatasets = true;
-		});
+		this.map.subscribe((nextViewport) => this.handleViewportChange(nextViewport));
 
 		this.legend = new ChartLegend(this.legendRootElement, this.config);
 		this.legend.init();
-		this.legend.subscribe((event) => {
-			this.toggleActiveDatasets(event);
+		this.legend.subscribe((event) => this.toggleActiveDatasets(event));
 
-			const idx = this.selectedPointIndex;
-			const datasets = this.datasets.filter(d => d.targetOpacity !== 0);
-			this.tooltip.updateTooltipData(this.timeline[idx], this.getSelectedPointsData(datasets, idx));
-		});
+		this.composite = composite;
 
-		this.tooltip = new Tooltip(this.tooltipRootElement);
-		this.tooltip.init();
+		if (!this.composite) {
+			this.rafId = requestAnimationFrame((ts) => this.scheduleNextFrame(ts));
+		}
+	}
 
-		this.addEventListeners();
+	handleViewportChange(nextViewport) {
+		this.viewport.start = nextViewport.start;
+		this.viewport.end = nextViewport.end;
+		this.shouldRerenderDatasets = true;
+		this.shouldRerenderLabels = true;
 
-		requestAnimationFrame((ts) => this.update(ts));
+		if (!this.rafId) {
+			this.rafId = requestAnimationFrame((ts) => this.scheduleNextFrame(ts));
+		}
 	}
 
 	toggleActiveDatasets({ id, checked }) {
@@ -185,14 +184,32 @@ class Chart {
 			}
 		}
 
+		this.shouldRerenderDatasets = true;
+		this.shouldRerenderLabels = true;
 		this.forceUpdateGVB();
+
+		if (!this.rafId) {
+			this.rafId = requestAnimationFrame((ts) => this.scheduleNextFrame(ts));
+		}
+	}
+
+	scheduleNextFrame(ts) {
+		// Experimental optimization
+		if (!this.shouldRerenderDatasets && !this.shouldRerenderLabels) {
+			console.log('do not render at all');
+			cancelAnimationFrame(this.rafId);
+			this.rafId = null;
+
+			return;
+		}
+
+		this.rafId = requestAnimationFrame((ts) => this.scheduleNextFrame(ts));
+		this.update(ts);
 	}
 
 	forceUpdateGVB() {};
 
 	update(ts) {
-		requestAnimationFrame((ts) => this.update(ts));
-
 		const prevTs = this.prevTs || ts;
 		// update prev timestamp
 		this.delta = Math.min(100, ts - prevTs);
@@ -203,10 +220,9 @@ class Chart {
 		const end = Math.round(this.viewport.end * 100) / 100;
 		const start = Math.round(this.viewport.start * 100) / 100;
 		const chartHeight = this.canvasSize.height - LABEL_OFFSET;
+		const startTimestamp = this.timeline[0] + Math.floor(start * this.timelineDiff);
+		const dueTimestamp = this.timeline[0] + Math.floor(end * this.timelineDiff);
 
-		const diff = this.timeline[this.timeline.length - 1] - this.timeline[0];
-		const startTimestamp = this.timeline[0] + Math.floor(start * diff);
-		const dueTimestamp = this.timeline[0] + Math.floor(end * diff);
 		const k = 0.008 * this.delta;
 		let activeDatasets = [];
 		let shouldRerenderDatasets = false;
@@ -216,12 +232,11 @@ class Chart {
 		for(let i = 0; i < this.datasets.length; i++) {
 			const diff = this.datasets[i].targetOpacity - this.datasets[i].opacity;
 
-			// todo add optimization flag
-			this.datasets[i].opacity = Math.abs(diff) < Number.EPSILON
+			this.datasets[i].opacity = Math.abs(diff) < PRECISION
 				? this.datasets[i].targetOpacity
 				: this.datasets[i].opacity + k * diff;
 
-			shouldRerenderDatasets = !Math.abs(diff) < Number.EPSILON || shouldRerenderDatasets;
+			shouldRerenderDatasets = !Math.abs(diff) < PRECISION || shouldRerenderDatasets;
 
 			if (this.datasets[i].targetOpacity === 1) {
 				activeDatasets.push(this.datasets[i]);
@@ -234,15 +249,15 @@ class Chart {
 			? getLowerBorder(this.min, this.max, 0)
 			: this.lowerBorder;
 		const ratioY = chartHeight / (this.max - this.lowerBorder);
-		const ratioX = this.virtualWidth / diff;
+		const ratioX = this.virtualWidth / this.timelineDiff;
 
 		if (this.lastLowerBorder != null) {
 			const diff = this.lowerBorder - this.lastLowerBorder;
 
-			this.lastLowerBorder = Math.abs(diff) < Number.EPSILON
+			this.lastLowerBorder = Math.abs(diff) < PRECISION
 				? this.lowerBorder
 				: this.lastLowerBorder + k * diff;
-			isLowerBorderChanging = !Math.abs(diff) < Number.EPSILON;
+			isLowerBorderChanging = !Math.abs(diff) < PRECISION;
 
 		} else {
 			this.lastLowerBorder = this.lowerBorder;
@@ -251,43 +266,42 @@ class Chart {
 		if (this.lastRatioY != null) {
 			const diff = ratioY - this.lastRatioY;
 
-			this.lastRatioY = Math.abs(diff) < Number.EPSILON
+			this.lastRatioY = Math.abs(diff) < PRECISION
 				? ratioY
 				: this.lastRatioY + k * diff;
 
-			isRatioYChanging = !Math.abs(diff) < Number.EPSILON;
+			isRatioYChanging = !Math.abs(diff) < PRECISION;
 		} else {
 			this.lastRatioY = ratioY;
 		}
 
-		this.labelsCtx.setTransform(1, 0, 0, 1, this.offsetX, 0);
-		this.labelsCtx.clearRect(0, 0, this.virtualWidth, this.canvasSize.height);
+		if (this.shouldRerenderLabels || isLowerBorderChanging || isRatioYChanging) {
+			this.labelsCtx.setTransform(1, 0, 0, 1, this.offsetX, 0);
+			this.labelsCtx.clearRect(0, 0, this.virtualWidth, this.canvasSize.height);
 
-		this.drawGrid(ratioY, ratioX, this.lowerBorder);
+			this.drawGrid(ratioY, ratioX, this.lowerBorder);
+		} else {
+			console.log('not render labels');
+		}
 
-		if (shouldRerenderDatasets || this.shouldRerenderDatasets || isRatioYChanging || isLowerBorderChanging) {
+		if (this.shouldRerenderDatasets || shouldRerenderDatasets || isRatioYChanging || isLowerBorderChanging) {
 			this.lastRatioX = ratioX;
 
 			this.datasetsCtx.setTransform(1, 0, 0, 1, this.offsetX, 0);
 			this.datasetsCtx.clearRect(0, 0, this.virtualWidth, this.canvasSize.height);
 
-			this.getRenderedDatasets().forEach(dataset => {
-				this.drawChart(dataset, this.lastRatioY, ratioX);
-
-				if (this.selectedPointIndex && dataset.targetOpacity !== 0) {
-					this.drawSelectedPoint(
-						this.selectedPointX,
-						this.getRelativeY(chartHeight, dataset.values[this.selectedPointIndex], this.lastRatioY),
-						dataset.color
-					);
+			for (let i = 0; i < this.datasets.length; i++) {
+				if (+this.datasets[i].opacity.toFixed(2) > 0) {
+					this.drawChart(this.datasets[i], this.lastRatioY, ratioX);
 				}
-			});
+			}
 
-			this.shouldRerenderDatasets = false;
 		} else {
-			// console.log('no rerender dataset!!!!')
+			console.log('no rerender dataset!!!!');
 		}
 
+		this.shouldRerenderLabels = this.isXLabelsAnimating || this.isYLabelsAnimating;
+		this.shouldRerenderDatasets = shouldRerenderDatasets || isRatioYChanging || isLowerBorderChanging;
 		this.map.update(ts);
 	}
 
@@ -299,16 +313,15 @@ class Chart {
 		const newLabelsY = new Array(6)
 			.fill(0)
 			.map((el, index) => ({
-					targetOpacity: 1,
+					targetOpacity: 0.4,
 					opacity: 0,
-					targetStrokeOpacity: 1,
+					targetStrokeOpacity: 0.08,
 					strokeOpacity: 0,
 					currentValue: Math.floor((dimension * index + lowerBorder) * 1000) / 1000,
 				})
 			);
 
 		const p = 0.005 * this.delta;
-		const ps = 0.003 * this.delta;
 
 		for (let key in this.labelsY) {
 			this.labelsY[key].targetOpacity = 0;
@@ -324,7 +337,7 @@ class Chart {
 
 			if (label) {
 				label.targetOpacity = 0.4;
-				label.targetStrokeOpacity = 0.16;
+				label.targetStrokeOpacity = 0.08;
 			} else {
 				this.labelsY[newLabelsY[i].currentValue] = newLabelsY[i];
 			}
@@ -333,8 +346,10 @@ class Chart {
 		this.labelsCtx.save();
 
 		this.labelsCtx.lineWidth = 1;
-		this.labelsCtx.font = `22px Arial`;
+		this.labelsCtx.font = `13px Arial`;
 		this.labelsCtx.fillStyle = 'rgba(0, 0, 0, 0.4)';
+
+		let isLabelsAnimating = false;
 
 		for (let key in this.labelsY) {
 			const label = this.labelsY[key];
@@ -342,8 +357,15 @@ class Chart {
 			const opacityDiff = label.targetOpacity - label.opacity;
 			const strokeOpacityDiff = label.targetStrokeOpacity - label.strokeOpacity;
 
-			label.opacity += p * opacityDiff;
-			label.strokeOpacity += ps * strokeOpacityDiff;
+			label.opacity = Math.abs(opacityDiff) < LABELS_PRECISION
+				? label.targetOpacity
+				: label.opacity + p * opacityDiff;
+
+			label.strokeOpacity = Math.abs(strokeOpacityDiff) < LABELS_PRECISION
+				? label.targetStrokeOpacity
+				: label.strokeOpacity + p * strokeOpacityDiff;
+
+			isLabelsAnimating = !Math.abs(opacityDiff) < LABELS_PRECISION || !Math.abs(strokeOpacityDiff) < LABELS_PRECISION || isLabelsAnimating;
 
 			this.labelsCtx.save();
 
@@ -359,11 +381,11 @@ class Chart {
 		}
 
 		this.labelsCtx.restore();
+		this.isYLabelsAnimating = isLabelsAnimating;
 	}
 
 	dragXLabels(ratioX) {
-		const diff = this.timeline[this.timeline.length - 1] - this.timeline[0];
-		const initStep = diff / VERTICAL_LINES;
+		const initStep = this.timelineDiff / VERTICAL_LINES;
 		const newLabelsX = [];
 		const p = 0.005 * this.delta;
 		let step = initStep;
@@ -376,7 +398,7 @@ class Chart {
 		while (nextLabelDate < this.timeline[this.timeline.length - 1]) {
 			const offset = nextLabelDate === this.timeline[0]
 				? 0
-				: -1 * LABEL_WIDTH / 2;
+				: -0.5;
 
 			newLabelsX.push({
 				text: formatDate(nextLabelDate),
@@ -392,7 +414,7 @@ class Chart {
 		// Add last label
 		newLabelsX.push({
 			text: formatDate(this.timeline[this.timeline.length - 1]),
-			offset: -1 * LABEL_WIDTH,
+			offset: -1,
 			date: this.timeline[this.timeline.length - 1],
 			targetOpacity: 0.4,
 			opacity: 0,
@@ -418,17 +440,22 @@ class Chart {
 
 		this.labelsCtx.save();
 
-		this.labelsCtx.font = `22px Arial`;
+		this.labelsCtx.font = `14px Arial`;
 		this.labelsCtx.fillStyle = 'rgba(0, 0, 0, 0.4)';
+
+		let isLabelsAnimating = false;
 
 		for(let key in this.labelsX) {
 			const label = this.labelsX[key];
 			const diff = label.targetOpacity - label.opacity;
-			const x = (label.date - this.timeline[0]) * ratioX + label.offset;
+			const x = (label.date - this.timeline[0]) * ratioX + label.offset * this.labelsCtx.measureText(label.text).width;
 
 			// todo add optimization flag
-			label.opacity += p * diff;
+			label.opacity = Math.abs(diff) < LABELS_PRECISION
+				? label.targetOpacity
+				: label.opacity + p * diff;
 
+			isLabelsAnimating = !Math.abs(diff) < LABELS_PRECISION || isLabelsAnimating;
 			this.labelsCtx.save();
 
 			this.labelsCtx.beginPath();
@@ -440,6 +467,7 @@ class Chart {
 		}
 
 		this.labelsCtx.restore();
+		this.isXLabelsAnimating = isLabelsAnimating;
 	}
 
 	drawGrid(ratioY, ratioX, lowerBorder) {
@@ -455,7 +483,7 @@ class Chart {
 
 		this.datasetsCtx.save();
 
-		this.datasetsCtx.lineWidth = 4.0;
+		this.datasetsCtx.lineWidth = 3.0;
 		this.datasetsCtx.lineJoin = 'round';
 		this.datasetsCtx.beginPath();
 		this.datasetsCtx.moveTo(0, y);
@@ -468,28 +496,6 @@ class Chart {
 		}
 
 		this.datasetsCtx.stroke();
-		this.datasetsCtx.restore();
-	}
-
-	getRelativeY(chartHeight, value, ratioY) {
-		return chartHeight - (value - this.lastLowerBorder) * ratioY;
-	}
-
-	drawSelectedPoint(x, y, color) {
-		const r = 6.0;
-
-		this.datasetsCtx.save();
-		this.datasetsCtx.beginPath();
-		this.datasetsCtx.strokeStyle = color;
-		this.datasetsCtx.lineWidth = 6.0;
-		this.datasetsCtx.fillStyle = this.isNightMode
-			? '#017'
-			: '#fff';
-
-		this.datasetsCtx.arc(x - r + 5, y - r + 5, r, 0, Math.PI * 2);
-
-		this.datasetsCtx.stroke();
-		this.datasetsCtx.fill();
 		this.datasetsCtx.restore();
 	}
 
@@ -513,45 +519,6 @@ class Chart {
 		}
 
 		return [Math.floor(minValue * 0.99 * 1000) / 1000, Math.floor(maxValue * 1.01 * 1000) / 1000];
-	}
-
-	addEventListeners() {
-		this.labelsCanvas.addEventListener('touchstart', event => {
-			const x = event.touches[0].clientX;
-			const virtualX = this.getRelativeXCoordinate(x, this.virtualWidth, this.offsetX);
-			const idx = Math.round(virtualX * this.timeline.length / this.virtualWidth) - 1;
-			const pointsData = this.getSelectedPointsData(this.getRenderedDatasets(), idx);
-
-			this.selectedPointIndex = idx;
-			this.selectedPointX = (this.timeline[idx] - this.timeline[0]) * this.lastRatioX;
-			this.tooltip.updateTooltipData(this.timeline[idx], pointsData);
-			this.tooltip.updateTooltipPosition(this.getAbsoluteXCoordinate(this.selectedPointX, this.virtualWidth, this.offsetX));
-
-			this.shouldRerenderDatasets = true;
-			event.preventDefault();
-		});
-	};
-
-	getRenderedDatasets() {
-		return this.datasets.filter(dataset => +dataset.opacity.toFixed(2) > 0);
-	}
-
-	getSelectedPointsData(datasets, idx) {
-		return datasets.map(dataset => {
-			return {
-				color: dataset.color,
-				value: dataset.values[idx],
-				chartName: this.config.names[Object.keys(this.config.names).find(key => key === dataset.id)],
-			}
-		});
-	}
-
-	getRelativeXCoordinate(xCoord, virtualWidth, offsetX) {
-		return xCoord - offsetX - 25;
-	}
-
-	getAbsoluteXCoordinate(xCoord, virtualWidth, offsetX) {
-		return xCoord + offsetX + 25;
 	}
 }
 

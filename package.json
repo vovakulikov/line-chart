@@ -19,5 +19,9 @@
   "bugs": {
     "url": "https://github.com/borislobanov92/telegram_chart/issues"
   },
-  "homepage": "https://github.com/borislobanov92/telegram_chart#readme"
+  "homepage": "https://github.com/borislobanov92/telegram_chart#readme",
+  "dependencies": {
+    "g": "^2.0.1",
+    "node-static": "^0.7.11"
+  }
 }

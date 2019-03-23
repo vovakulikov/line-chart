@@ -133,7 +133,9 @@ class ChartMap {
 		for (let i = 0; i < this.datasets.length; i++) {
 			if (this.datasets[i].id === id) {
 				this.datasets[i].targetOpacity = 0;
-			} else {
+			}
+
+			if (this.datasets[i].targetOpacity === 1){
 				stayOnDatasets.push(this.datasets[i]);
 			}
 		}
@@ -208,6 +210,7 @@ class ChartMap {
 
 		this.ctx.save();
 		this.ctx.lineWidth = 2;
+		this.ctx.lineJoin = 'round';
 		this.ctx.beginPath();
 		this.ctx.strokeStyle = hexToRGB(color, opacity);
 

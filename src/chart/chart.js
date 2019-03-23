@@ -165,10 +165,6 @@ class Chart {
 		}
 	}
 
-	prepareData(ratioX, datasets, timeline) {
-
-	}
-
 	handleViewportChange(nextViewport) {
 		this.viewport.start = nextViewport.start;
 		this.viewport.end = nextViewport.end;

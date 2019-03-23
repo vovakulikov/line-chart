@@ -10,10 +10,11 @@ body {
     padding: 8px;
 }
 
-.chart {}
-
 .chart_canvas-wrap {
     position: relative;
+    -webkit-user-select: none;
+    -moz-user-select: none;
+    -ms-user-select: none;
 }
 
 .canvas_for-labels {

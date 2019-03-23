@@ -207,6 +207,7 @@ class Chart {
 
 		[this.min, this.max] = this.getVerticalBorders(activeDatasets, startTimestamp, dueTimestamp);
 		this.lowerBorder = activeDatasets.length > 0
+			// TODO Added memoization
 			? getLowerBorder(this.min, this.max, 0)
 			: this.lowerBorder;
 		const ratioY = chartHeight / (this.max - this.lowerBorder);
@@ -215,7 +216,6 @@ class Chart {
 		if (this.lastLowerBorder != null) {
 			const diff = this.lowerBorder - this.lastLowerBorder;
 
-			// todo add optimization flag
 			this.lastLowerBorder = Math.abs(diff) < Number.EPSILON
 				? this.lowerBorder
 				: this.lastLowerBorder + k * diff;
@@ -228,7 +228,6 @@ class Chart {
 		if (this.lastRatioY != null) {
 			const diff = ratioY - this.lastRatioY;
 
-			// todo add optimization flag
 			this.lastRatioY = Math.abs(diff) < Number.EPSILON
 				? ratioY
 				: this.lastRatioY + k * diff;
@@ -238,15 +237,16 @@ class Chart {
 			this.lastRatioY = ratioY;
 		}
 
-		this.labelsCtx.clearRect(0, 0, this.virtualWidth, this.canvasSize.height);
 		this.labelsCtx.setTransform(1, 0, 0, 1, this.offsetX, 0);
+		this.labelsCtx.clearRect(0, 0, this.virtualWidth, this.canvasSize.height);
 
 		this.drawGrid(ratioY, ratioX, this.lowerBorder);
 
 		if (shouldRerenderDatasets || this.shouldRerenderDatasets || isRatioYChanging || isLowerBorderChanging) {
 			this.lastRatioX = ratioX;
-			this.datasetsCtx.clearRect(0, 0, this.virtualWidth, this.canvasSize.height);
+
 			this.datasetsCtx.setTransform(1, 0, 0, 1, this.offsetX, 0);
+			this.datasetsCtx.clearRect(0, 0, this.virtualWidth, this.canvasSize.height);
 
 			for (let i = 0; i < this.datasets.length; i++) {
 				if (+this.datasets[i].opacity.toFixed(2) > 0) {

@@ -640,8 +640,7 @@ class Chart {
 	addEventListeners() {
 		this.labelsCanvas.addEventListener('touchstart', event => this.showTooltip(event.touches[0].clientX));
 		this.labelsCanvas.addEventListener('touchmove', event => this.showTooltip(event.touches[0].clientX));
-		this.labelsCanvas.addEventListener('mousedown', event => this.showTooltip(event.clientX));
-		this.labelsCanvas.addEventListener('mousemove', event => this.showTooltip(event.clientX));
+		this.labelsCanvas.addEventListener('mousedown', event => this.showTooltip(event.offsetX));
 
 		const nightModeButton = this.nightModeButton.element;
 
@@ -717,9 +716,9 @@ class Chart {
 	}
 
 	showTooltip(x) {
-		const virtualX = this.getRelativeXCoordinate(x, this.offsetX);
-		const i = Math.round(virtualX * (this.timeline.length - 1) / this.virtualWidth);
-		const idx = Math.max(0, Math.min(this.timeline.length, i));
+		const virtualX = this.getRelativeXCoordinate(x - pageXOffset, this.offsetX);
+		const i = Math.floor(virtualX * (this.timeline.length - 1) / this.virtualWidth);
+		const idx = Math.max(0, Math.min(this.timeline.length - 1, i));
 		const pointsData = this.getSelectedPointsData(this.getRenderedDatasets(), idx);
 
 		this.selectedPointIndex = idx;

@@ -347,6 +347,8 @@ class Chart {
 				}
 			}
 
+			this.drawSelectedVerticalLine();
+
 			for (let i = 0; i < this.datasets.length; i++) {
 				if (+this.datasets[i].opacity.toFixed(2) > 0) {
 				    const dataset = this.datasets[i];
@@ -362,6 +364,8 @@ class Chart {
                     }
 				}
 			}
+
+
 
 		} else {
 			console.log('no rerender dataset!!!!');
@@ -570,17 +574,19 @@ class Chart {
 		return chartHeight - (value - this.lastLowerBorder) * ratioY;
 	}
 
+	drawSelectedVerticalLine() {
+		this.datasetsCtx.lineWidth = 2;
+		this.datasetsCtx.strokeStyle = 'rgba(0, 0, 0, 0.08)';
+		this.datasetsCtx.beginPath();
+		this.datasetsCtx.moveTo(this.selectedPointX, 0);
+		this.datasetsCtx.lineTo(this.selectedPointX, this.canvasSize.height - LABEL_OFFSET);
+		this.datasetsCtx.stroke();
+	}
+
 	drawSelectedPoint(x, y, color) {
 		const r = 6.0;
 
 		this.datasetsCtx.save();
-
-		this.datasetsCtx.lineWidth = 2;
-		this.datasetsCtx.strokeStyle = 'rgba(0, 0, 0, 0.08)';
-		this.datasetsCtx.beginPath();
-		this.datasetsCtx.moveTo(x - r / 2 + 3, 0);
-		this.datasetsCtx.lineTo(x - r / 2 + 3, this.canvasSize.height - LABEL_OFFSET);
-		this.datasetsCtx.stroke();
 
 		this.datasetsCtx.beginPath();
 		this.datasetsCtx.strokeStyle = color;

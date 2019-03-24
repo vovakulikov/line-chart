@@ -4,12 +4,15 @@ import rafThrottle from '../utils/raf-throttle.js';
 import debounce from '../utils/debounce.js';
 import ChartMap from '../chart-map/chart-map.js';
 import ChartLegend from "../legend/chart-legend.js";
+import Tooltip from '../tooltip/tooltip.js';
 
 const LABEL_OFFSET = 30;
 const TOP_OFFSET = 40;
 const HORIZONTAL_LINES = 5;
 const VERTICAL_LINES = 3;
 const DATE_COEF = 1.68;
+const CHART_PADDING = 8;
+const NIGHT_MODE_BG = '#242F3E';
 
 const PRECISION = 5e-10;
 const LABELS_PRECISION = 5e-3;
@@ -45,6 +48,8 @@ class Chart {
 	getTemplate(id = 0) {
 		return `
 			<section class="chart" id="chart-${id}">
+				<div class="selected-tooltip"></div>
+
 			 	<div class="chart__header">
         	Followers
       	</div>
@@ -58,6 +63,7 @@ class Chart {
 				
 				<div class="chart__map"></div>
 				<div class="chart__legend chart-legend"></div>
+				
 			</section>
 		`;
 	}
@@ -80,9 +86,10 @@ class Chart {
 	// 	]
 	// };
 
-	constructor({ rootElement, config }) {
+	constructor({ rootElement, config, nightModeButton }) {
 		this.rootElement = rootElement;
 		this.config = config;
+		this.nightModeButton = nightModeButton;
 		this.timeline = this.config.timeline || [];
 		this.datasets = null;
 
@@ -92,12 +99,14 @@ class Chart {
 		this.map = null;
 		this.legend = null;
 		this.legendRootElement = null;
+		this.tooltip = null;
+		this.tooltipRootElement = null;
 
 		this.canvasSize = null;
 		this.devicePixelRatio = null;
 		this.virtualWidth = null;
 		this.offsetX = null;
-		this.viewport = { start: 0.5, end: 1.0 };
+		this.viewport = { start: 0.7, end: 1.0 };
 
 		this.prevTs = null;
 		this.delta = null;
@@ -105,6 +114,7 @@ class Chart {
 		this.max = 0;
 		this.lowerBorder = 0;
 		this.lastRatioY = null;
+		this.ratioX = null;
 		this.timelineDiff = this.timeline[this.timeline.length - 1] - this.timeline[0];
 		this.lastLowerBorder = null;
 
@@ -114,6 +124,9 @@ class Chart {
 		this.isYLabelsAnimating = true;
 		this.isXLabelsAnimating = true;
 		this.rafId = null;
+		this.selectedPointIndex = null;
+		this.selectedPointX = null;
+		this.isNightMode = false;
 
 		this.resizeIframe = null;
 
@@ -127,6 +140,7 @@ class Chart {
 		this.rootElement.insertAdjacentHTML('beforeend', this.getTemplate());
 		this.mapRootElement = this.rootElement.querySelector('.chart__map');
 		this.legendRootElement = this.rootElement.querySelector('.chart__legend');
+		this.tooltipRootElement = this.rootElement.querySelector('.selected-tooltip');
 
 		this.datasetsCanvas = this.rootElement.querySelector('.canvas_for-datasets');
 		this.labelsCanvas = this.rootElement.querySelector('.canvas_for-labels');
@@ -149,21 +163,58 @@ class Chart {
 
 		this.map = new ChartMap({
 			rootElement: this.mapRootElement,
-			config: { ...this.config, viewport: this.viewport }
+			config: { ...this.config, viewport: this.viewport },
+			nightModeButton: this.nightModeButton,
 		});
 
 		this.map.init();
-		this.map.subscribe((nextViewport) => this.handleViewportChange(nextViewport));
+		this.map.subscribe((nextViewport) => {
+			const tooltipX = this.getAbsoluteXCoordinate(this.selectedPointX, this.offsetX);
+
+			this.tooltip.updateTooltipPosition(tooltipX - CHART_PADDING, this.canvasSize.width);
+			this.shouldRerenderDatasets = true;
+
+			this.handleViewportChange(nextViewport);
+		});
 
 		this.legend = new ChartLegend(this.legendRootElement, this.config);
 
 		this.legend.init();
-		this.legend.subscribe((event) => this.toggleActiveDatasets(event));
+		this.legend.subscribe((event) => {
+			this.toggleActiveDatasets(event);
+
+			const idx = this.selectedPointIndex;
+			const datasets = this.datasets.filter(d => d.targetOpacity !== 0);
+			this.tooltip.updateTooltipData(this.timeline[idx], this.getSelectedPointsData(datasets, idx));
+		});
+
+		this.nightModeButton.subscribe(isNightMode => {
+			this.isNightMode = isNightMode;
+			this.tooltipRootElement.style.backgroundColor = this.isNightMode
+					? NIGHT_MODE_BG
+					: '#fff';
+			this.tooltipRootElement.style.borderColor = this.isNightMode
+					? NIGHT_MODE_BG
+					: '#eee';
+			this.tooltipRootElement.querySelector('.selected-tooltip__header').style.color = this.isNightMode
+					? '#fff'
+					: '#000';
+
+			this.shouldRerenderDatasets = true;
+
+			this.scheduleNextFrame();
+		});
+
+		this.tooltip = new Tooltip(this.tooltipRootElement);
+		this.tooltip.init();
+
+		this.addEventListeners();
 
 		this.resizeIframe.contentWindow
 			.addEventListener('resize', debounce(() => this.handleFrameResize(), 100).bind(this));
 
-		this.rafId = requestAnimationFrame((ts) => this.startNextFrame(ts));
+		this.scheduleNextFrame();
+		// this.rafId = requestAnimationFrame((ts) => this.startNextFrame(ts));
 	}
 
 	handleFrameResize() {
@@ -174,7 +225,7 @@ class Chart {
 		this.updateSizes();
 
 		// if we already has working loop we should not run another one
-		this.sheduleNextFrame();
+		this.scheduleNextFrame();
 	}
 
 	updateSizes() {
@@ -193,7 +244,7 @@ class Chart {
 		this.shouldRerenderLabels = true;
 
 		// if we already has working loop we should not run another one
-		this.sheduleNextFrame()
+		this.scheduleNextFrame();
 	}
 
 	toggleActiveDatasets({ id, checked }) {
@@ -209,10 +260,10 @@ class Chart {
 		this.forceUpdateGVB();
 
 		// if we already has working loop we should not run another one
-		this.sheduleNextFrame()
+		this.scheduleNextFrame()
 	}
 
-	sheduleNextFrame() {
+	scheduleNextFrame() {
 		if (!this.rafId) {
 			this.rafId = requestAnimationFrame((ts) => this.startNextFrame(ts));
 		}
@@ -276,7 +327,7 @@ class Chart {
 			? getLowerBorder(this.min, this.max, 0)
 			: this.lowerBorder;
 		const ratioY = chartHeight / (this.max - this.lowerBorder);
-		const ratioX = this.virtualWidth / this.timelineDiff;
+		this.ratioX = this.virtualWidth / this.timelineDiff;
 
 		// Spring lower border
 		if (this.lastLowerBorder != null) {
@@ -308,16 +359,31 @@ class Chart {
 			this.labelsCtx.setTransform(this.devicePixelRatio, 0, 0, this.devicePixelRatio, this.offsetX * 2, 0);
 			this.labelsCtx.clearRect(0, 0, this.virtualWidth, this.canvasSize.height);
 
-			this.drawGrid(ratioY, ratioX, this.lowerBorder);
+			this.drawGrid(ratioY, this.ratioX, this.lowerBorder);
 		}
 
 		if (this.shouldRerenderDatasets || shouldRerenderDatasets || isRatioYChanging || isLowerBorderChanging) {
 			this.datasetsCtx.setTransform(this.devicePixelRatio, 0, 0, this.devicePixelRatio, this.offsetX * 2, 0);
 			this.datasetsCtx.clearRect(0, 0, this.virtualWidth, this.canvasSize.height);
 
+			this.selectedPointX = (this.timeline[this.selectedPointIndex] - this.timeline[0]) * this.ratioX;
+			this.drawSelectedVerticalLine();
+
 			for (let i = 0; i < this.datasets.length; i++) {
 				if (+this.datasets[i].opacity.toFixed(2) > 0) {
-					this.drawChart(this.datasets[i], this.lastRatioY, ratioX);
+					this.drawChart(this.datasets[i], this.lastRatioY, this.ratioX);
+				}
+
+				if (this.selectedPointIndex !== null && this.datasets[i].targetOpacity !== 0) {
+					this.drawSelectedPoint(
+						this.selectedPointX,
+						this.getRelativeY(
+							chartHeight,
+							this.datasets[i].values[this.selectedPointIndex],
+							this.lastRatioY
+						),
+						this.datasets[i].color
+					);
 				}
 			}
 
@@ -504,7 +570,6 @@ class Chart {
 			const diff = label.targetOpacity - label.opacity;
 			const x = (label.date - this.timeline[0]) * ratioX + label.offset * this.labelsCtx.measureText(label.text).width;
 
-			// todo add optimization flag
 			label.opacity = Math.abs(diff) < LABELS_PRECISION
 				? label.targetOpacity
 				: label.opacity + p * diff;
@@ -522,6 +587,65 @@ class Chart {
 
 		this.labelsCtx.restore();
 		this.isXLabelsAnimating = isLabelsAnimating;
+	}
+
+	// drawGrid(ratioY, ratioX, lowerBorder) {
+	// 	this.dragXLabels(ratioX);
+	// 	this.drawYLabels(ratioY, lowerBorder);
+	// }
+	//
+	// drawChart(dataset, ratioY, ratioX) {
+	// 	const { color, opacity } = dataset;
+	// 	const updatedColor = hexToRGB(color, opacity);
+	// 	const chartHeight = this.canvasSize.height - LABEL_OFFSET;
+	// 	let y = chartHeight - (dataset.values[0] - this.lastLowerBorder) * ratioY;
+	//
+	// 	this.datasetsCtx.save();
+	//
+	// 	this.datasetsCtx.lineWidth = 3.0;
+	// 	this.datasetsCtx.lineJoin = 'round';
+	// 	this.datasetsCtx.beginPath();
+	// 	this.datasetsCtx.moveTo(0, y);
+	// 	this.datasetsCtx.strokeStyle = updatedColor;
+	//
+	// 	for(let i = 0; i < dataset.values.length; i++) {
+	// 		y = chartHeight - (dataset.values[i] - this.lastLowerBorder) * ratioY;
+	//
+	// 		this.datasetsCtx.lineTo((this.timeline[i] - this.timeline[0]) * ratioX, y);
+	// 	}
+	//
+	// 	this.datasetsCtx.stroke();
+	// 	this.datasetsCtx.restore();
+	// }
+
+	getRelativeY(chartHeight, value, ratioY) {
+		return chartHeight - (value - this.lastLowerBorder) * ratioY;
+	}
+
+	drawSelectedVerticalLine() {
+		this.datasetsCtx.lineWidth = 2;
+		this.datasetsCtx.strokeStyle = 'rgba(0, 0, 0, 0.08)';
+		this.datasetsCtx.beginPath();
+		this.datasetsCtx.moveTo(this.selectedPointX, 0);
+		this.datasetsCtx.lineTo(this.selectedPointX, this.canvasSize.height - LABEL_OFFSET);
+		this.datasetsCtx.stroke();
+	}
+
+	drawSelectedPoint(x, y, color) {
+		const r = 4.0;
+
+		this.datasetsCtx.save();
+
+		this.datasetsCtx.beginPath();
+		this.datasetsCtx.strokeStyle = color;
+		this.datasetsCtx.lineWidth = 6.0;
+		this.datasetsCtx.fillStyle = this.isNightMode
+			? NIGHT_MODE_BG
+			: '#fff';
+		this.datasetsCtx.arc(x, y, r, 0, Math.PI * 2);
+		this.datasetsCtx.stroke();
+		this.datasetsCtx.fill();
+		this.datasetsCtx.restore();
 	}
 
 	getVerticalBorders(datasets, startDate, dueDate) {
@@ -544,6 +668,53 @@ class Chart {
 		}
 
 		return [Math.floor(minValue * 0.99 * 1000) / 1000, Math.floor(maxValue * 1.01 * 1000) / 1000];
+	}
+
+	addEventListeners() {
+		this.labelsCanvas.addEventListener('touchstart', event => {
+			event.preventDefault();
+
+			const x = event.touches[0].clientX;
+			const virtualX = this.getRelativeXCoordinate(x, this.offsetX);
+			const i = Math.round(virtualX * (this.timeline.length - 1) / this.virtualWidth);
+			const idx = Math.max(0, Math.min(this.timeline.length, i));
+			const pointsData = this.getSelectedPointsData(this.getRenderedDatasets(), idx);
+
+			this.selectedPointIndex = idx;
+			this.selectedPointX = (this.timeline[idx] - this.timeline[0]) * this.ratioX;
+			this.tooltip.updateTooltipData(this.timeline[idx], pointsData);
+
+			const tooltipX = Math.floor(this.getAbsoluteXCoordinate(this.selectedPointX, this.offsetX));
+
+			this.tooltip.updateTooltipPosition(tooltipX - CHART_PADDING, this.canvasSize.width);
+			this.shouldRerenderDatasets = true;
+
+			this.scheduleNextFrame();
+		});
+	};
+
+	getRenderedDatasets() {
+		return this.datasets.filter(dataset => +dataset.opacity.toFixed(2) > 0);
+	}
+
+	getSelectedPointsData(datasets, idx) {
+		return datasets.map(dataset => {
+			return {
+				color: dataset.color,
+				value: dataset.values[idx],
+				chartName: this.config.names[Object.keys(this.config.names).find(key => key === dataset.id)],
+			}
+		});
+	}
+
+	// TODO move to utils or static
+	getRelativeXCoordinate(xCoord, offsetX) {
+		return xCoord - offsetX - CHART_PADDING;
+	}
+
+	// TODO move to utils or static
+	getAbsoluteXCoordinate(xCoord, offsetX) {
+		return xCoord + offsetX + CHART_PADDING;
 	}
 }
 

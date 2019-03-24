@@ -43,9 +43,11 @@ class ChartMap {
 	// 		}
 	// 	]
 	// };
-	constructor({ rootElement, config }) {
+	constructor({ rootElement, config, nightModeButton }) {
 		this.rootElement = rootElement;
 		this.config = config;
+		this.nightModeButton = nightModeButton;
+
 		this.timeline = this.config.timeline || [];
 		this.viewport = this.config.viewport || {};
 		this.datasets = null;
@@ -60,6 +62,7 @@ class ChartMap {
 		this.ratioX = null;
 		this.prevTs = null;
 		this.shouldRender = true;
+		this.isNightMode = false;
 		this.subscribers = [];
 
 		this.maxY = 0;
@@ -80,6 +83,13 @@ class ChartMap {
 
 		this.updateSizes();
 		this.addEventListeners();
+
+		this.nightModeButton.subscribe(isNightMode => {
+			this.isNightMode = isNightMode;
+			this.sliderElement.style.boxShadow = this.isNightMode
+				? 'none'
+				: '0 20px 20px 9999px #e0e2e466';
+		});
 	}
 
 	addEventListeners() {

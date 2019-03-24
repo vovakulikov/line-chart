@@ -16,4 +16,10 @@ html, body {
 main {
     max-width: 700px;
     margin: 0 auto;
+    padding-top: 15px;
+    padding-bottom: 60px;
+}
+
+.chart {
+    margin-bottom: 40px;
 }

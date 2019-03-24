@@ -10,14 +10,6 @@ body {
     padding: 8px;
 }
 
-.chart:not(:last-child) {
-    margin-bottom: 40px;
-}
-
-.chart:last-child {
-    margin-bottom: 24px;
-}
-
 .chart_canvas-wrap {
     position: relative;
     -webkit-user-select: none;

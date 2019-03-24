@@ -11,7 +11,7 @@ const LABEL_OFFSET = 30;
 const TOP_OFFSET = 40;
 const HORIZONTAL_LINES = 5;
 const VERTICAL_LINES = 3;
-const DATE_COEF = 1.68;
+const DATE_COEF = 1.4;
 const CHART_PADDING = 8;
 const NIGHT_MODE_BG = '#242F3E';
 
@@ -181,9 +181,27 @@ class Chart {
 
 		this.map.updateSizes();
 		this.updateSizes();
+		this.updateTooltipPosition();
 
 		// if we already has working loop we should not run another one
 		this.scheduleNextFrame();
+	}
+
+	updateTooltipPosition() {
+		if (this.selectedPointIndex !== null) {
+			this.selectedPointX = (this.timeline[this.selectedPointIndex] - this.timeline[0]) * this.ratioX;
+
+			const tooltipX = this.getAbsoluteXCoordinate(this.selectedPointX, this.offsetX);
+			const pointValues = this.datasets.map(d => d.values[this.selectedPointIndex] * this.lastRatioY);
+
+			this.tooltip.updateTooltipPosition({
+				xCoord: tooltipX - CHART_PADDING,
+				canvasWidth: this.canvasSize.width,
+				canvasHeight: this.canvasSize.height,
+				pointValues,
+			});
+			this.shouldRerenderDatasets = true;
+		}
 	}
 
 	updateSizes() {
@@ -193,6 +211,10 @@ class Chart {
 		this.datasetsCanvas.height = this.canvasSize.height * this.devicePixelRatio;
 		this.labelsCanvas.width = this.canvasSize.width * this.devicePixelRatio;
 		this.labelsCanvas.height = this.canvasSize.height * this.devicePixelRatio;
+
+		this.virtualWidth = calculateCanvasWidth(this.canvasSize.width, this.viewport);
+		this.offsetX = getViewportOffset(this.virtualWidth, this.viewport.start);
+		this.ratioX = this.virtualWidth / this.timelineDiff;
 	}
 
 	changeViewport(nextViewport) {
@@ -248,7 +270,7 @@ class Chart {
 	update(ts) {
 		const prevTs = this.prevTs || ts;
 		// update prev timestamp
-		this.delta = Math.min(20, ts - prevTs);
+		this.delta = Math.min(50, ts - prevTs);
 		this.virtualWidth = calculateCanvasWidth(this.canvasSize.width, this.viewport);
 		this.offsetX = getViewportOffset(this.virtualWidth, this.viewport.start);
 		this.prevTs = ts;
@@ -669,19 +691,7 @@ class Chart {
 	}
 
 	handleViewportChange(nextViewport) {
-		if (this.selectedPointIndex !== null) {
-			const tooltipX = this.getAbsoluteXCoordinate(this.selectedPointX, this.offsetX);
-			const pointValues = this.datasets.map(d => d.values[this.selectedPointIndex] * this.lastRatioY);
-
-			this.tooltip.updateTooltipPosition({
-				xCoord: tooltipX - CHART_PADDING,
-				canvasWidth: this.canvasSize.width,
-				canvasHeight: this.canvasSize.height,
-				pointValues,
-			});
-			this.shouldRerenderDatasets = true;
-		}
-
+		this.updateTooltipPosition();
 		this.changeViewport(nextViewport);
 	}
 
@@ -691,7 +701,11 @@ class Chart {
 		const idx = this.selectedPointIndex;
 		const datasets = this.datasets.filter(d => d.targetOpacity !== 0);
 
-		this.tooltip.updateTooltipData(this.timeline[idx], this.getSelectedPointsData(datasets, idx));
+		if (datasets.length > 0 ) {
+			this.tooltip.updateTooltipData(this.timeline[idx], this.getSelectedPointsData(datasets, idx));
+		} else {
+			this.closeTooltip();
+		}
 	}
 
 	showTooltip(x) {
@@ -704,17 +718,9 @@ class Chart {
 		this.selectedPointX = (this.timeline[idx] - this.timeline[0]) * this.ratioX;
 		this.tooltip.updateTooltipData(this.timeline[idx], pointsData);
 
-		const tooltipX = Math.floor(this.getAbsoluteXCoordinate(this.selectedPointX, this.offsetX));
-		const pointValues = this.datasets.map(d => d.values[this.selectedPointIndex] * this.lastRatioY);
-
-		this.tooltip.updateTooltipPosition({
-			xCoord: tooltipX - CHART_PADDING,
-			canvasWidth: this.canvasSize.width,
-			canvasHeight: this.canvasSize.height,
-			pointValues,
-		});
-
 		this.shouldRerenderLabels = true;
+
+		this.updateTooltipPosition();
 		this.scheduleNextFrame();
 	}
 

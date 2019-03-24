@@ -1,6 +1,7 @@
 import formatDate from '../utils/format-date.js';
 import hexToRGB from '../utils/hex-to-rgb.js';
 import rafThrottle from '../utils/raf-throttle.js';
+import debounce from '../utils/debounce.js';
 import ChartMap from '../chart-map/chart-map.js';
 import ChartLegend from "../legend/chart-legend.js";
 
@@ -49,6 +50,7 @@ class Chart {
 						class="chart__canvas canvas_for-datasets">
 					</canvas>
 					<canvas class="chart__canvas canvas_for-labels"></canvas>
+					<iframe class="chart__resize-frame" src=""></iframe>
 				</div>
 				
 				<div class="chart__map"></div>
@@ -100,7 +102,6 @@ class Chart {
 		this.max = 0;
 		this.lowerBorder = 0;
 		this.lastRatioY = null;
-		this.lastRatioX = null;
 		this.timelineDiff = this.timeline[this.timeline.length - 1] - this.timeline[0];
 		this.lastLowerBorder = null;
 
@@ -110,6 +111,8 @@ class Chart {
 		this.isYLabelsAnimating = true;
 		this.isXLabelsAnimating = true;
 		this.rafId = null;
+
+		this.resizeIframe = null;
 
 		this.labelsY = {};
 		this.labelsX = {};
@@ -124,20 +127,14 @@ class Chart {
 
 		this.datasetsCanvas = this.rootElement.querySelector('.canvas_for-datasets');
 		this.labelsCanvas = this.rootElement.querySelector('.canvas_for-labels');
+		this.resizeIframe = this.rootElement.querySelector('.chart__resize-frame');
 		this.datasetsCtx = this.datasetsCanvas.getContext('2d');
 		this.labelsCtx = this.labelsCanvas.getContext('2d');
+
 		this.devicePixelRatio = window.devicePixelRatio || 1;
-		this.canvasSize = this.datasetsCanvas.getBoundingClientRect();
-
-		this.datasetsCanvas.width = this.canvasSize.width * this.devicePixelRatio;
-		this.datasetsCanvas.height = this.canvasSize.height * this.devicePixelRatio;
-		this.labelsCanvas.width = this.canvasSize.width * this.devicePixelRatio;
-		this.labelsCanvas.height = this.canvasSize.height * this.devicePixelRatio;
-
-		this.virtualWidth = calculateVirtualWidth(this.canvasSize.width, this.viewport);
-
-		this.lastRatioX = this.virtualWidth / (this.timeline[this.timeline - 1] - this.timeline[0]);
-		this.offsetX = getViewportOffset(this.virtualWidth, this.viewport.start);
+		this.updateSizes();
+		// this.virtualWidth = calculateVirtualWidth(this.canvasSize.width * this.devicePixelRatio, this.viewport);
+		// this.offsetX = getViewportOffset(this.virtualWidth, this.viewport.start);
 
 		this.datasets = this.config.datasets
 			.map((dataset) => ({
@@ -160,7 +157,30 @@ class Chart {
 		this.legend.init();
 		this.legend.subscribe((event) => this.toggleActiveDatasets(event));
 
-		this.rafId = requestAnimationFrame((ts) => this.scheduleNextFrame(ts));
+		this.resizeIframe.contentWindow
+			.addEventListener('resize', debounce(() => this.handleFrameResize(), 100).bind(this));
+
+		this.rafId = requestAnimationFrame((ts) => this.startNextFrame(ts));
+	}
+
+	handleFrameResize() {
+		this.shouldRerenderDatasets = true;
+		this.shouldRerenderLabels = true;
+
+		this.map.updateSizes();
+		this.updateSizes();
+
+		// if we already has working loop we should not run another one
+		this.sheduleNextFrame();
+	}
+
+	updateSizes() {
+		this.canvasSize = this.datasetsCanvas.getBoundingClientRect();
+
+		this.datasetsCanvas.width = this.canvasSize.width * this.devicePixelRatio;
+		this.datasetsCanvas.height = this.canvasSize.height * this.devicePixelRatio;
+		this.labelsCanvas.width = this.canvasSize.width * this.devicePixelRatio;
+		this.labelsCanvas.height = this.canvasSize.height * this.devicePixelRatio;
 	}
 
 	handleViewportChange(nextViewport) {
@@ -170,9 +190,7 @@ class Chart {
 		this.shouldRerenderLabels = true;
 
 		// if we already has working loop we should not run another one
-		if (!this.rafId) {
-			this.rafId = requestAnimationFrame((ts) => this.scheduleNextFrame(ts));
-		}
+		this.sheduleNextFrame()
 	}
 
 	toggleActiveDatasets({ id, checked }) {
@@ -188,22 +206,27 @@ class Chart {
 		this.forceUpdateGVB();
 
 		// if we already has working loop we should not run another one
+		this.sheduleNextFrame()
+	}
+
+	sheduleNextFrame() {
 		if (!this.rafId) {
-			this.rafId = requestAnimationFrame((ts) => this.scheduleNextFrame(ts));
+			this.rafId = requestAnimationFrame((ts) => this.startNextFrame(ts));
 		}
 	}
 
-	scheduleNextFrame(ts) {
+	startNextFrame(ts) {
 		// Experimental optimization
 		if (!this.shouldRerenderDatasets && !this.shouldRerenderLabels) {
 			// Maybe we don't need this line
 			cancelAnimationFrame(this.rafId);
 			this.rafId = null;
+			console.log('not rerender');
 
 			return;
 		}
 
-		this.rafId = requestAnimationFrame((ts) => this.scheduleNextFrame(ts));
+		this.rafId = requestAnimationFrame((ts) => this.startNextFrame(ts));
 		this.update(ts);
 	}
 
@@ -286,8 +309,6 @@ class Chart {
 		}
 
 		if (this.shouldRerenderDatasets || shouldRerenderDatasets || isRatioYChanging || isLowerBorderChanging) {
-			this.lastRatioX = ratioX;
-
 			this.datasetsCtx.setTransform(this.devicePixelRatio, 0, 0, this.devicePixelRatio, this.offsetX * 2, 0);
 			this.datasetsCtx.clearRect(0, 0, this.virtualWidth, this.canvasSize.height);
 

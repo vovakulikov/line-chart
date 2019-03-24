@@ -76,27 +76,9 @@ class ChartMap {
 		this.canvasSize = this.canvas.getBoundingClientRect();
 		this.devicePixelRatio = window.devicePixelRatio || 1;
 
-		this.canvas.width = this.canvasSize.width * this.devicePixelRatio;
-		this.canvas.height = this.canvasSize.height * this.devicePixelRatio;
-
-		this.sliderElement.style.width = `${(this.viewport.end - this.viewport.start) * this.canvasSize.width}px`;
-		this.sliderElement.style.transform = `translateX(${this.viewport.start * this.canvasSize.width}px)`;
-
 		[this.minY, this.maxY] = getMinMaxRange(this.config.datasets);
 
-		this.ratioY = this.canvasSize.height / (this.maxY - this.minY);
-		this.ratioX = this.canvasSize.width / (this.timeline[this.timeline.length - 1] - this.timeline[0]);
-
-		this.datasets = this.config.datasets
-			.map((dataset) => ({
-					...dataset,
-					ratioY: this.ratioY,
-					targetRatioY: this.ratioY,
-					opacity: 1,
-					targetOpacity: 1,
-				})
-			);
-
+		this.updateSizes();
 		this.addEventListeners();
 	}
 
@@ -116,12 +98,13 @@ class ChartMap {
 
 	fireChangeViewportEvent(event) {
 		const { nextOffset, nextWidth } = event;
-		const nextViewport = {
+
+		this.viewport = {
 			start: Math.max(0, nextOffset / this.canvasSize.width),
 			end: Math.min(1, (nextOffset + nextWidth) / this.canvasSize.width)
 		};
 
-		this.subscribers.forEach((callback) => callback(nextViewport));
+		this.subscribers.forEach((callback) => callback(this.viewport));
 	}
 
 	toggleDataset({ id, checked }) {
@@ -156,7 +139,6 @@ class ChartMap {
 	}
 
 	turnOnDataset(id) {
-
 		[this.minY, this.maxY] = getMinMaxRange(this.datasets);
 		this.shouldRender = true;
 
@@ -170,6 +152,30 @@ class ChartMap {
 
 			this.datasets[i].targetRatioY = newRatioY;
 		}
+	}
+
+	updateSizes() {
+		this.canvasSize = this.canvas.getBoundingClientRect();
+		this.canvas.width = this.canvasSize.width * this.devicePixelRatio;
+		this.canvas.height = this.canvasSize.height * this.devicePixelRatio;
+
+		this.ratioY = this.canvasSize.height / (this.maxY - this.minY);
+		this.ratioX = this.canvasSize.width / (this.timeline[this.timeline.length - 1] - this.timeline[0]);
+
+		this.sliderElement.style.width = `${(this.viewport.end - this.viewport.start) * this.canvasSize.width}px`;
+		this.sliderElement.style.transform = `translateX(${this.viewport.start * this.canvasSize.width}px)`;
+
+		this.datasets = this.config.datasets
+			.map((dataset) => ({
+					...dataset,
+					ratioY: this.ratioY,
+					targetRatioY: this.ratioY,
+					opacity: 1,
+					targetOpacity: 1,
+				})
+			);
+
+		this.shouldRender = true;
 	}
 
 	update(ts) {

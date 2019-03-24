@@ -30,6 +30,14 @@ body {
     height: 400px;
 }
 
+.chart__resize-frame {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+}
+
 .app-container {
     padding: 16px 24px 0;
 }

@@ -81,3 +81,7 @@
 .chart__legend--night-mode .legend-button {
     border-color: #bacde073;
 }
+
+.chart__legend--night-mode .legend-button__checkbox-badge::before {
+    background-color: #242F3E;
+}

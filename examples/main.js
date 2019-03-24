@@ -37,6 +37,7 @@ async function main () {
 	// const chartsComposer = new ChartComposer(charts);
 	//
 	// chartsComposer.start();
+
 	// const chart = new Chart({ rootElement: rootElement, config: data[0] });
 	// chart.init();
 

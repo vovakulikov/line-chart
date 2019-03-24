@@ -1,11 +1,12 @@
 import formatDate from '../utils/format-date.js';
 import hexToRGB from '../utils/hex-to-rgb.js';
 import rafThrottle from '../utils/raf-throttle.js';
+import debounce from '../utils/debounce.js';
 import ChartMap from '../chart-map/chart-map.js';
 import ChartLegend from "../legend/chart-legend.js";
 import Tooltip from '../tooltip/tooltip.js';
 
-const LABEL_OFFSET = 40;
+const LABEL_OFFSET = 30;
 const TOP_OFFSET = 40;
 const HORIZONTAL_LINES = 5;
 const VERTICAL_LINES = 3;
@@ -49,11 +50,15 @@ class Chart {
 			<section class="chart" id="chart-${id}">
 				<div class="selected-tooltip"></div>
 
+			 	<div class="chart__header">
+        	Followers
+      	</div>
 				<div class="chart_canvas-wrap">
 					<canvas
 						class="chart__canvas canvas_for-datasets">
 					</canvas>
 					<canvas class="chart__canvas canvas_for-labels"></canvas>
+					<iframe class="chart__resize-frame" src=""></iframe>
 				</div>
 				
 				<div class="chart__map"></div>
@@ -94,10 +99,11 @@ class Chart {
 		this.map = null;
 		this.legend = null;
 		this.legendRootElement = null;
-        this.tooltip = null;
-        this.tooltipRootElement = null;
+		this.tooltip = null;
+		this.tooltipRootElement = null;
 
 		this.canvasSize = null;
+		this.devicePixelRatio = null;
 		this.virtualWidth = null;
 		this.offsetX = null;
 		this.viewport = { start: 0.7, end: 1.0 };
@@ -108,7 +114,7 @@ class Chart {
 		this.max = 0;
 		this.lowerBorder = 0;
 		this.lastRatioY = null;
-		this.lastRatioX = null;
+		this.ratioX = null;
 		this.timelineDiff = this.timeline[this.timeline.length - 1] - this.timeline[0];
 		this.lastLowerBorder = null;
 
@@ -122,40 +128,30 @@ class Chart {
 		this.selectedPointX = null;
 		this.isNightMode = false;
 
+		this.resizeIframe = null;
+
 		this.labelsY = {};
 		this.labelsX = {};
-
-		this.composite = false;
 
 		[this.getVerticalBorders, this.forceUpdateGVB] = rafThrottle(this.getVerticalBorders.bind(this), 250)
 	}
 
-	init({ composite = false } = {}) {
+	init() {
 		this.rootElement.insertAdjacentHTML('beforeend', this.getTemplate());
 		this.mapRootElement = this.rootElement.querySelector('.chart__map');
 		this.legendRootElement = this.rootElement.querySelector('.chart__legend');
 		this.tooltipRootElement = this.rootElement.querySelector('.selected-tooltip');
 
-		this.map = new ChartMap({
-			rootElement: this.mapRootElement,
-			config: { ...this.config, viewport: this.viewport },
-			nightModeButton: this.nightModeButton,
-		});
-
 		this.datasetsCanvas = this.rootElement.querySelector('.canvas_for-datasets');
 		this.labelsCanvas = this.rootElement.querySelector('.canvas_for-labels');
+		this.resizeIframe = this.rootElement.querySelector('.chart__resize-frame');
 		this.datasetsCtx = this.datasetsCanvas.getContext('2d');
 		this.labelsCtx = this.labelsCanvas.getContext('2d');
-		this.canvasSize = this.datasetsCanvas.getBoundingClientRect();
 
-		this.datasetsCanvas.width = this.canvasSize.width;
-		this.datasetsCanvas.height = this.canvasSize.height;
-		this.labelsCanvas.width = this.canvasSize.width;
-		this.labelsCanvas.height = this.canvasSize.height;
-
-		this.virtualWidth = calculateVirtualWidth(this.canvasSize.width, this.viewport);
-		this.lastRatioX = this.virtualWidth / (this.timeline[this.timeline - 1] - this.timeline[0]);
-		this.offsetX = getViewportOffset(this.virtualWidth, this.viewport.start);
+		this.devicePixelRatio = window.devicePixelRatio || 1;
+		this.updateSizes();
+		// this.virtualWidth = calculateVirtualWidth(this.canvasSize.width * this.devicePixelRatio, this.viewport);
+		// this.offsetX = getViewportOffset(this.virtualWidth, this.viewport.start);
 
 		this.datasets = this.config.datasets
 			.map((dataset) => ({
@@ -165,19 +161,25 @@ class Chart {
 				})
 			);
 
+		this.map = new ChartMap({
+			rootElement: this.mapRootElement,
+			config: { ...this.config, viewport: this.viewport },
+			nightModeButton: this.nightModeButton,
+		});
+
 		this.map.init();
 		this.map.subscribe((nextViewport) => {
 			if (this.selectedPointIndex !== null) {
 				const tooltipX = this.getAbsoluteXCoordinate(this.selectedPointX, this.offsetX);
 
-				this.tooltip.updateTooltipPosition(tooltipX - CHART_PADDING, this.datasetsCanvas.width);
-				this.shouldRerenderDatasets = true;
+			this.tooltip.updateTooltipPosition(tooltipX - CHART_PADDING, this.canvasSize.width);
+			this.shouldRerenderDatasets = true;
 
-				this.handleViewportChange(nextViewport);
-			}
+			this.handleViewportChange(nextViewport);}
 		});
 
 		this.legend = new ChartLegend(this.legendRootElement, this.config);
+
 		this.legend.init();
 		this.legend.subscribe((event) => {
 			this.toggleActiveDatasets(event);
@@ -187,58 +189,76 @@ class Chart {
 			this.tooltip.updateTooltipData(this.timeline[idx], this.getSelectedPointsData(datasets, idx));
 		});
 
-        this.nightModeButton.subscribe(isNightMode => {
-            this.isNightMode = isNightMode;
-            let tooltipBg;
-            let tooltipBorder;
-            let tooltipHeader;
+		this.nightModeButton.subscribe(isNightMode => {
+			this.isNightMode = isNightMode;
+			let tooltipBg;
+			let tooltipBorder;
+			let tooltipHeader;
 
-            if (this.isNightMode) {
-				tooltipBg = NIGHT_MODE_BG;
+			if (this.isNightMode) {
+					tooltipBg = NIGHT_MODE_BG;
 				tooltipBorder = NIGHT_MODE_BG;
-				tooltipHeader = '#fff';
+					tooltipHeader = '#fff';
 			} else {
 				tooltipBg = '#fff';
 				tooltipBorder = '#eee';
 				tooltipHeader = '#000';
 			}
 
-            this.tooltipRootElement.style.backgroundColor = tooltipBg;
-            this.tooltipRootElement.style.borderColor = tooltipBorder;
-            this.tooltipRootElement.querySelector('.selected-tooltip__header').style.color = tooltipHeader;
+			this.shouldRerenderDatasets = true;
+			this.tooltipRootElement.style.backgroundColor = tooltipBg;
+			this.tooltipRootElement.style.borderColor = tooltipBorder;
+			this.tooltipRootElement.querySelector('.selected-tooltip__header').style.color = tooltipHeader;
 
 			this.legendRootElement.classList.toggle('chart__legend--night-mode');
 
-            this.shouldRerenderDatasets = true;
-            this.shouldRerenderLabels = true;
+			this.shouldRerenderDatasets = true;
+			this.shouldRerenderLabels = true;
 
-			if (!this.rafId) {
-				this.rafId = requestAnimationFrame((ts) => this.scheduleNextFrame(ts));
-			}
-        });
+			this.scheduleNextFrame();
+		});
 
 		this.tooltip = new Tooltip(this.tooltipRootElement);
 		this.tooltip.init();
 
-        this.addEventListeners();
+		this.addEventListeners();
 
-        this.composite = composite;
+		this.resizeIframe.contentWindow
+			.addEventListener('resize', debounce(() => this.handleFrameResize(), 100).bind(this));
 
-		if (!this.composite) {
-			this.rafId = requestAnimationFrame((ts) => this.scheduleNextFrame(ts));
-		}
+		this.scheduleNextFrame();
+		// this.rafId = requestAnimationFrame((ts) => this.startNextFrame(ts));
 	}
 
-    handleViewportChange(nextViewport) {
-        this.viewport.start = nextViewport.start;
-        this.viewport.end = nextViewport.end;
-        this.shouldRerenderDatasets = true;
-        this.shouldRerenderLabels = true;
+	handleFrameResize() {
+		this.shouldRerenderDatasets = true;
+		this.shouldRerenderLabels = true;
 
-        if (!this.rafId) {
-            this.rafId = requestAnimationFrame((ts) => this.scheduleNextFrame(ts));
-        }
-    }
+		this.map.updateSizes();
+		this.updateSizes();
+
+		// if we already has working loop we should not run another one
+		this.scheduleNextFrame();
+	}
+
+	updateSizes() {
+		this.canvasSize = this.datasetsCanvas.getBoundingClientRect();
+
+		this.datasetsCanvas.width = this.canvasSize.width * this.devicePixelRatio;
+		this.datasetsCanvas.height = this.canvasSize.height * this.devicePixelRatio;
+		this.labelsCanvas.width = this.canvasSize.width * this.devicePixelRatio;
+		this.labelsCanvas.height = this.canvasSize.height * this.devicePixelRatio;
+	}
+
+	handleViewportChange(nextViewport) {
+		this.viewport.start = nextViewport.start;
+		this.viewport.end = nextViewport.end;
+		this.shouldRerenderDatasets = true;
+		this.shouldRerenderLabels = true;
+
+		// if we already has working loop we should not run another one
+		this.scheduleNextFrame();
+	}
 
 	toggleActiveDatasets({ id, checked }) {
 		for(let i = 0; i < this.datasets.length; i++) {
@@ -252,31 +272,38 @@ class Chart {
 		this.shouldRerenderLabels = true;
 		this.forceUpdateGVB();
 
+		// if we already has working loop we should not run another one
+		this.scheduleNextFrame()
+	}
+
+	scheduleNextFrame() {
 		if (!this.rafId) {
-			this.rafId = requestAnimationFrame((ts) => this.scheduleNextFrame(ts));
+			this.rafId = requestAnimationFrame((ts) => this.startNextFrame(ts));
 		}
 	}
 
-	scheduleNextFrame(ts) {
+	startNextFrame(ts) {
 		// Experimental optimization
 		if (!this.shouldRerenderDatasets && !this.shouldRerenderLabels) {
-			console.log('do not render at all');
+			// Maybe we don't need this line
 			cancelAnimationFrame(this.rafId);
 			this.rafId = null;
+			console.log('not rerender');
 
 			return;
 		}
 
-		this.rafId = requestAnimationFrame((ts) => this.scheduleNextFrame(ts));
+		this.rafId = requestAnimationFrame((ts) => this.startNextFrame(ts));
 		this.update(ts);
 	}
 
+	// Just for init force get vertical borders method
 	forceUpdateGVB() {};
 
 	update(ts) {
 		const prevTs = this.prevTs || ts;
 		// update prev timestamp
-		this.delta = Math.min(100, ts - prevTs);
+		this.delta = Math.min(20, ts - prevTs);
 		this.virtualWidth = calculateCanvasWidth(this.canvasSize.width, this.viewport);
 		this.offsetX = getViewportOffset(this.virtualWidth, this.viewport.start);
 		this.prevTs = ts;
@@ -313,8 +340,9 @@ class Chart {
 			? getLowerBorder(this.min, this.max, 0)
 			: this.lowerBorder;
 		const ratioY = chartHeight / (this.max - this.lowerBorder);
-		const ratioX = this.virtualWidth / this.timelineDiff;
+		this.ratioX = this.virtualWidth / this.timelineDiff;
 
+		// Spring lower border
 		if (this.lastLowerBorder != null) {
 			const diff = this.lowerBorder - this.lastLowerBorder;
 
@@ -327,6 +355,7 @@ class Chart {
 			this.lastLowerBorder = this.lowerBorder;
 		}
 
+		// Spring ratioY
 		if (this.lastRatioY != null) {
 			const diff = ratioY - this.lastRatioY;
 
@@ -340,52 +369,73 @@ class Chart {
 		}
 
 		if (this.shouldRerenderLabels || isLowerBorderChanging || isRatioYChanging) {
-			this.labelsCtx.setTransform(1, 0, 0, 1, this.offsetX, 0);
+			this.labelsCtx.setTransform(this.devicePixelRatio, 0, 0, this.devicePixelRatio, this.offsetX * 2, 0);
 			this.labelsCtx.clearRect(0, 0, this.virtualWidth, this.canvasSize.height);
 
-			this.drawGrid(ratioY, ratioX, this.lowerBorder);
-		} else {
-			console.log('not render labels');
+			this.drawGrid(ratioY, this.ratioX, this.lowerBorder);
 		}
 
 		if (this.shouldRerenderDatasets || shouldRerenderDatasets || isRatioYChanging || isLowerBorderChanging) {
-			this.lastRatioX = ratioX;
-
-			this.datasetsCtx.setTransform(1, 0, 0, 1, this.offsetX, 0);
+			this.datasetsCtx.setTransform(this.devicePixelRatio, 0, 0, this.devicePixelRatio, this.offsetX * 2, 0);
 			this.datasetsCtx.clearRect(0, 0, this.virtualWidth, this.canvasSize.height);
 
-			for (let i = 0; i < this.datasets.length; i++) {
-				if (+this.datasets[i].opacity.toFixed(2) > 0) {
-					this.drawChart(this.datasets[i], this.lastRatioY, ratioX);
-				}
-			}
-
-			this.selectedPointX = (this.timeline[this.selectedPointIndex] - this.timeline[0]) * this.lastRatioX;
+			this.selectedPointX = (this.timeline[this.selectedPointIndex] - this.timeline[0]) * this.ratioX;
 			this.drawSelectedVerticalLine();
 
 			for (let i = 0; i < this.datasets.length; i++) {
 				if (+this.datasets[i].opacity.toFixed(2) > 0) {
-				    const dataset = this.datasets[i];
+					this.drawChart(this.datasets[i], this.lastRatioY, this.ratioX);
+				}
 
-                    if (this.selectedPointIndex !== null && dataset.targetOpacity !== 0) {
-                        this.drawSelectedPoint(
-                            this.selectedPointX,
-                            this.getRelativeY(chartHeight, dataset.values[this.selectedPointIndex], this.lastRatioY),
-                            dataset.color
-                        );
-                    }
+				if (this.selectedPointIndex !== null && this.datasets[i].targetOpacity !== 0) {
+					this.drawSelectedPoint(
+						this.selectedPointX,
+						this.getRelativeY(
+							chartHeight,
+							this.datasets[i].values[this.selectedPointIndex],
+							this.lastRatioY
+						),
+						this.datasets[i].color
+					);
 				}
 			}
 
-
-
-		} else {
-			console.log('no rerender dataset!!!!');
 		}
 
 		this.shouldRerenderLabels = this.isXLabelsAnimating || this.isYLabelsAnimating;
 		this.shouldRerenderDatasets = shouldRerenderDatasets || isRatioYChanging || isLowerBorderChanging;
+
+		// Update springs at chart map
 		this.map.update(ts);
+	}
+
+	drawGrid(ratioY, ratioX, lowerBorder) {
+		this.drawXLabels(ratioX);
+		this.drawYLabels(ratioY, lowerBorder);
+	}
+
+	drawChart(dataset, ratioY, ratioX) {
+		const { color, opacity } = dataset;
+		const updatedColor = hexToRGB(color, opacity);
+		const chartHeight = this.canvasSize.height - LABEL_OFFSET;
+		let y = chartHeight - (dataset.values[0] - this.lastLowerBorder) * ratioY;
+
+		this.datasetsCtx.save();
+
+		this.datasetsCtx.lineWidth = 2.0;
+		this.datasetsCtx.lineJoin = 'round';
+		this.datasetsCtx.beginPath();
+		this.datasetsCtx.moveTo(0, y);
+		this.datasetsCtx.strokeStyle = updatedColor;
+
+		for(let i = 0; i < dataset.values.length; i++) {
+			y = chartHeight - (dataset.values[i] - this.lastLowerBorder) * ratioY;
+
+			this.datasetsCtx.lineTo((this.timeline[i] - this.timeline[0]) * ratioX, y);
+		}
+
+		this.datasetsCtx.stroke();
+		this.datasetsCtx.restore();
 	}
 
 	drawYLabels(ratioY, lowerBorder) {
@@ -463,7 +513,7 @@ class Chart {
 			this.labelsCtx.strokeStyle = this.isNightMode
 				? hexToRGB('#bacde073', label.strokeOpacity)
 				: hexToRGB('#000000', label.strokeOpacity);
-			this.labelsCtx.fillText(Math.floor(label.currentValue), offsetX + 10, y - 6);
+			this.labelsCtx.fillText(Math.floor(label.currentValue).toString(), offsetX + 10, y - 6);
 			this.labelsCtx.stroke();
 
 			this.labelsCtx.restore();
@@ -473,7 +523,7 @@ class Chart {
 		this.isYLabelsAnimating = isLabelsAnimating;
 	}
 
-	dragXLabels(ratioX) {
+	drawXLabels(ratioX) {
 		const initStep = this.timelineDiff / VERTICAL_LINES;
 		const newLabelsX = [];
 		const p = 0.005 * this.delta;
@@ -529,7 +579,7 @@ class Chart {
 
 		this.labelsCtx.save();
 
-		this.labelsCtx.font = `14px Arial`;
+		this.labelsCtx.font = `13px Arial`;
 		this.labelsCtx.fillStyle = this.isNightMode
 			? hexToRGB('#bacde073', 0.4)
 			: hexToRGB('#000000', 0.4);
@@ -541,7 +591,6 @@ class Chart {
 			const diff = label.targetOpacity - label.opacity;
 			const x = (label.date - this.timeline[0]) * ratioX + label.offset * this.labelsCtx.measureText(label.text).width;
 
-			// todo add optimization flag
 			label.opacity = Math.abs(diff) < LABELS_PRECISION
 				? label.targetOpacity
 				: label.opacity + p * diff;
@@ -555,7 +604,7 @@ class Chart {
 			this.labelsCtx.fillStyle = this.isNightMode
 				? hexToRGB('#bacde073', label.opacity.toPrecision(3))
 				: hexToRGB('#000000', label.opacity.toPrecision(3));
-			this.labelsCtx.fillText(label.text, x, this.canvasSize.height - 20);
+			this.labelsCtx.fillText(label.text, x, this.canvasSize.height - 10);
 			this.labelsCtx.restore();
 		}
 
@@ -563,34 +612,34 @@ class Chart {
 		this.isXLabelsAnimating = isLabelsAnimating;
 	}
 
-	drawGrid(ratioY, ratioX, lowerBorder) {
-		this.dragXLabels(ratioX);
-		this.drawYLabels(ratioY, lowerBorder);
-	}
-
-	drawChart(dataset, ratioY, ratioX) {
-		const { color, opacity } = dataset;
-		const updatedColor = hexToRGB(color, opacity);
-		const chartHeight = this.canvasSize.height - LABEL_OFFSET;
-		let y = chartHeight - (dataset.values[0] - this.lastLowerBorder) * ratioY;
-
-		this.datasetsCtx.save();
-
-		this.datasetsCtx.lineWidth = 3.0;
-		this.datasetsCtx.lineJoin = 'round';
-		this.datasetsCtx.beginPath();
-		this.datasetsCtx.moveTo(0, y);
-		this.datasetsCtx.strokeStyle = updatedColor;
-
-		for(let i = 0; i < dataset.values.length; i++) {
-			y = chartHeight - (dataset.values[i] - this.lastLowerBorder) * ratioY;
-
-			this.datasetsCtx.lineTo((this.timeline[i] - this.timeline[0]) * ratioX, y);
-		}
-
-		this.datasetsCtx.stroke();
-		this.datasetsCtx.restore();
-	}
+	// drawGrid(ratioY, ratioX, lowerBorder) {
+	// 	this.dragXLabels(ratioX);
+	// 	this.drawYLabels(ratioY, lowerBorder);
+	// }
+	//
+	// drawChart(dataset, ratioY, ratioX) {
+	// 	const { color, opacity } = dataset;
+	// 	const updatedColor = hexToRGB(color, opacity);
+	// 	const chartHeight = this.canvasSize.height - LABEL_OFFSET;
+	// 	let y = chartHeight - (dataset.values[0] - this.lastLowerBorder) * ratioY;
+	//
+	// 	this.datasetsCtx.save();
+	//
+	// 	this.datasetsCtx.lineWidth = 3.0;
+	// 	this.datasetsCtx.lineJoin = 'round';
+	// 	this.datasetsCtx.beginPath();
+	// 	this.datasetsCtx.moveTo(0, y);
+	// 	this.datasetsCtx.strokeStyle = updatedColor;
+	//
+	// 	for(let i = 0; i < dataset.values.length; i++) {
+	// 		y = chartHeight - (dataset.values[i] - this.lastLowerBorder) * ratioY;
+	//
+	// 		this.datasetsCtx.lineTo((this.timeline[i] - this.timeline[0]) * ratioX, y);
+	// 	}
+	//
+	// 	this.datasetsCtx.stroke();
+	// 	this.datasetsCtx.restore();
+	// }
 
 	getRelativeY(chartHeight, value, ratioY) {
 		return chartHeight - (value - this.lastLowerBorder) * ratioY;
@@ -648,6 +697,8 @@ class Chart {
 
 	addEventListeners() {
 		this.labelsCanvas.addEventListener('touchstart', event => {
+			event.preventDefault();
+
 			const x = event.touches[0].clientX;
 			const virtualX = this.getRelativeXCoordinate(x, this.offsetX);
 			const i = Math.round(virtualX * (this.timeline.length - 1) / this.virtualWidth);
@@ -655,20 +706,15 @@ class Chart {
 			const pointsData = this.getSelectedPointsData(this.getRenderedDatasets(), idx);
 
 			this.selectedPointIndex = idx;
-			this.selectedPointX = (this.timeline[idx] - this.timeline[0]) * this.lastRatioX;
+			this.selectedPointX = (this.timeline[idx] - this.timeline[0]) * this.ratioX;
 			this.tooltip.updateTooltipData(this.timeline[idx], pointsData);
 
 			const tooltipX = Math.floor(this.getAbsoluteXCoordinate(this.selectedPointX, this.offsetX));
 
-			this.tooltip.updateTooltipPosition(tooltipX - CHART_PADDING, this.datasetsCanvas.width);
-
+			this.tooltip.updateTooltipPosition(tooltipX - CHART_PADDING, this.canvasSize.width);
 			this.shouldRerenderDatasets = true;
 
-			if (!this.rafId) {
-				this.rafId = requestAnimationFrame((ts) => this.scheduleNextFrame(ts));
-			}
-
-			event.preventDefault();
+			this.scheduleNextFrame();
 		});
 	};
 
@@ -686,10 +732,12 @@ class Chart {
 		});
 	}
 
+	// TODO move to utils or static
 	getRelativeXCoordinate(xCoord, offsetX) {
 		return xCoord - offsetX - CHART_PADDING;
 	}
 
+	// TODO move to utils or static
 	getAbsoluteXCoordinate(xCoord, offsetX) {
 		return xCoord + offsetX + CHART_PADDING;
 	}

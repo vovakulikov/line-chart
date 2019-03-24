@@ -56,6 +56,7 @@ class ChartMap {
 		this.leftHandElement = null;
 		this.rightHandElement = null;
 		this.canvasSize = null;
+		this.devicePixelRatio = null;
 		this.ctx = null;
 		this.ratioY = null;
 		this.ratioX = null;
@@ -76,27 +77,12 @@ class ChartMap {
 		this.leftHandElement = this.rootElement.querySelector('.chart-map__left-hand');
 		this.rightHandElement = this.rootElement.querySelector('.chart-map__right-hand');
 		this.canvasSize = this.canvas.getBoundingClientRect();
-
-		this.canvas.width = this.canvasSize.width;
-		this.canvas.height = this.canvasSize.height;
-
-		this.sliderElement.style.width = `${(this.viewport.end - this.viewport.start) * this.canvasSize.width}px`;
-		this.sliderElement.style.transform = `translateX(${this.viewport.start * this.canvasSize.width}px)`;
+		this.devicePixelRatio = window.devicePixelRatio || 1;
 
 		[this.minY, this.maxY] = getMinMaxRange(this.config.datasets);
 
-		this.ratioY = this.canvasSize.height / (this.maxY - this.minY);
-		this.ratioX = this.canvasSize.width / (this.timeline[this.timeline.length - 1] - this.timeline[0]);
-
-		this.datasets = this.config.datasets
-			.map((dataset) => ({
-					...dataset,
-					ratioY: this.ratioY,
-					targetRatioY: this.ratioY,
-					opacity: 1,
-					targetOpacity: 1,
-				})
-			);
+		this.updateSizes();
+		this.addEventListeners();
 
 		this.nightModeButton.subscribe(isNightMode => {
 			this.isNightMode = isNightMode;
@@ -104,14 +90,16 @@ class ChartMap {
 				? 'none'
 				: '0 20px 20px 9999px #e0e2e466';
 		});
-
-		this.addEventListeners();
 	}
 
 	addEventListeners() {
-		this.sliderElement.addEventListener('touchstart', (event) => this.sliderTouchHandle(event));
-		this.leftHandElement.addEventListener('touchstart', (event) => this.leftHandTouchHandle(event));
-		this.rightHandElement.addEventListener('touchstart', (event) => this.rightHandTouchHandle(event));
+		this.sliderElement.addEventListener('touchstart', (event) => this.sliderTouchHandle(event, true));
+		this.leftHandElement.addEventListener('touchstart', (event) => this.leftHandTouchHandle(event, true));
+		this.rightHandElement.addEventListener('touchstart', (event) => this.rightHandTouchHandle(event, true));
+
+		this.sliderElement.addEventListener('mousedown', (event) => this.sliderTouchHandle(event));
+		this.leftHandElement.addEventListener('mousedown', (event) => this.leftHandTouchHandle(event));
+		this.rightHandElement.addEventListener('mousedown', (event) => this.rightHandTouchHandle(event));
 	};
 
 	subscribe(callback) {
@@ -120,12 +108,13 @@ class ChartMap {
 
 	fireChangeViewportEvent(event) {
 		const { nextOffset, nextWidth } = event;
-		const nextViewport = {
+
+		this.viewport = {
 			start: Math.max(0, nextOffset / this.canvasSize.width),
 			end: Math.min(1, (nextOffset + nextWidth) / this.canvasSize.width)
 		};
 
-		this.subscribers.forEach((callback) => callback(nextViewport));
+		this.subscribers.forEach((callback) => callback(this.viewport));
 	}
 
 	toggleDataset({ id, checked }) {
@@ -160,7 +149,6 @@ class ChartMap {
 	}
 
 	turnOnDataset(id) {
-
 		[this.minY, this.maxY] = getMinMaxRange(this.datasets);
 		this.shouldRender = true;
 
@@ -176,13 +164,37 @@ class ChartMap {
 		}
 	}
 
+	updateSizes() {
+		this.canvasSize = this.canvas.getBoundingClientRect();
+		this.canvas.width = this.canvasSize.width * this.devicePixelRatio;
+		this.canvas.height = this.canvasSize.height * this.devicePixelRatio;
+
+		this.ratioY = this.canvasSize.height / (this.maxY - this.minY);
+		this.ratioX = this.canvasSize.width / (this.timeline[this.timeline.length - 1] - this.timeline[0]);
+
+		this.sliderElement.style.width = `${(this.viewport.end - this.viewport.start) * this.canvasSize.width}px`;
+		this.sliderElement.style.transform = `translateX(${this.viewport.start * this.canvasSize.width}px)`;
+
+		this.datasets = this.config.datasets
+			.map((dataset) => ({
+					...dataset,
+					ratioY: this.ratioY,
+					targetRatioY: this.ratioY,
+					opacity: 1,
+					targetOpacity: 1,
+				})
+			);
+
+		this.shouldRender = true;
+	}
+
 	update(ts) {
 		if (!this.shouldRender) {
 			return;
 		}
 
 		const prevTs = this.prevTs || ts;
-		const delta = Math.min(50, ts - prevTs);
+		const delta = Math.min(16, ts - prevTs);
 
 		// update prev timestamp
 		this.prevTs = ts;
@@ -211,6 +223,7 @@ class ChartMap {
 		}
 
 		this.shouldRender = shouldRenderOnNextTick;
+		this.ctx.setTransform(this.devicePixelRatio, 0, 0, this.devicePixelRatio, 0, 0);
 		this.ctx.clearRect(0, 0, this.canvasSize.width, this.canvasSize.height);
 		this.datasets.forEach((dataset) => this.drawChart(dataset));
 	}
@@ -235,9 +248,13 @@ class ChartMap {
 		this.ctx.restore();
 	}
 
-	sliderTouchHandle(event) {
-		event = event.touches[0];
+	sliderTouchHandle(event, isTouchEvent = false) {
+		if (isTouchEvent) {
+			event = event.touches[0];
+		}
 
+		const moveEvent = isTouchEvent ? 'touchmove' : 'mousemove';
+		const upEvent = isTouchEvent ? 'touchend' : 'mouseup';
 		const wrapCoords = getCoords(this.canvas);
 		const coords = getCoords(event.target);
 		const startX = coords.left - wrapCoords.left;
@@ -248,7 +265,10 @@ class ChartMap {
 
 		const move = (event) => {
 			event.stopImmediatePropagation();
-			event = event.touches[0];
+
+			if (isTouchEvent) {
+				event = event.touches[0];
+			}
 
 			const delta = event.pageX - originEventX;
 
@@ -280,18 +300,23 @@ class ChartMap {
 		};
 
 		function cleanUp() {
-			document.removeEventListener('touchmove', move);
-			document.removeEventListener('touchend', cleanUp);
+			document.removeEventListener(moveEvent, move);
+			document.removeEventListener(upEvent, cleanUp);
 		}
 
-		document.addEventListener('touchmove', move);
-		document.addEventListener('touchend', cleanUp);
+		document.addEventListener(moveEvent, move);
+		document.addEventListener(upEvent, cleanUp);
 	}
 
-	rightHandTouchHandle(event) {
+	rightHandTouchHandle(event, isTouchEvent = false) {
 		event.stopImmediatePropagation();
-		event = event.touches[0];
 
+		if (isTouchEvent) {
+			event = event.touches[0];
+		}
+
+		const moveEvent = isTouchEvent ? 'touchmove' : 'mousemove';
+		const upEvent = isTouchEvent ? 'touchend' : 'mouseup';
 		const wrapCoords = getCoords(this.canvas);
 		const sliderCoords = getCoords(this.sliderElement);
 		const originEventX = event.pageX;
@@ -300,7 +325,10 @@ class ChartMap {
 
 		const changeWidth = (event) => {
 			event.stopImmediatePropagation();
-			event = event.touches[0];
+
+			if (isTouchEvent) {
+				event = event.touches[0];
+			}
 
 			const delta = event.pageX - originEventX;
 			const newWidth = originWidth + delta;
@@ -333,18 +361,23 @@ class ChartMap {
 		};
 
 		function cleanUp() {
-			document.removeEventListener('touchmove', changeWidth);
-			document.removeEventListener('touchend', cleanUp);
+			document.removeEventListener(moveEvent, changeWidth);
+			document.removeEventListener(upEvent, cleanUp);
 		}
 
-		document.addEventListener('touchmove', changeWidth);
-		document.addEventListener('touchend', cleanUp);
+		document.addEventListener(moveEvent, changeWidth);
+		document.addEventListener(upEvent, cleanUp);
 	}
 
-	leftHandTouchHandle(event) {
+	leftHandTouchHandle(event, isTouchEvent = false) {
 		event.stopImmediatePropagation();
-		event = event.touches[0];
 
+		if (isTouchEvent) {
+			event = event.touches[0];
+		}
+
+		const moveEvent = isTouchEvent ? 'touchmove' : 'mousemove';
+		const upEvent = isTouchEvent ? 'touchend' : 'mouseup';
 		const wrapCoords = getCoords(this.canvas);
 		const sliderCoords = getCoords(this.sliderElement);
 
@@ -355,7 +388,10 @@ class ChartMap {
 
 		const changeWidth = (event) => {
 			event.stopImmediatePropagation();
-			event = event.touches[0];
+
+			if (isTouchEvent) {
+				event = event.touches[0];
+			}
 
 			const delta = event.pageX - originEventX;
 			const newWidth = originWidth + -1 * delta;
@@ -387,12 +423,12 @@ class ChartMap {
 		};
 
 		function cleanUp() {
-			document.removeEventListener('touchmove', changeWidth);
-			document.removeEventListener('touchend', cleanUp);
+			document.removeEventListener(moveEvent, changeWidth);
+			document.removeEventListener(upEvent, cleanUp);
 		}
 
-		document.addEventListener('touchmove', changeWidth);
-		document.addEventListener('touchend', cleanUp);
+		document.addEventListener(moveEvent, changeWidth);
+		document.addEventListener(upEvent, cleanUp);
 	}
 }
 

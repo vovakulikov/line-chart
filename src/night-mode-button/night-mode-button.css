@@ -1,0 +1,12 @@
+.night-mode-button {
+    display: block;
+    color: rgb(0, 136, 204);
+    font-size: 28px;
+    margin: 24px auto 0;
+    cursor: pointer;
+    font-weight: 400;
+}
+
+.night-mode-button:active {
+    color: rgba(0, 136, 204, 0.32);
+}

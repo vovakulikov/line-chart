@@ -10,6 +10,10 @@ body {
     padding: 8px;
 }
 
+.chart {
+    margin-top: 40px;
+}
+
 .chart_canvas-wrap {
     position: relative;
     -webkit-user-select: none;

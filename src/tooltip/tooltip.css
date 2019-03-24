@@ -1,20 +1,22 @@
 .selected-tooltip {
-    display: none;
+    visibility: hidden;
     background-color: #fff;
-    padding: 16px 24px;
-    border: 2px solid #eee;
+    padding: 8px 12px;
+    box-shadow: 0 1px 8px 0 rgba(0, 0, 0, 0.2), 0 1px 8px 0 rgba(0, 0, 0, 0.2);
     border-radius: 6px;
     position: absolute;
-    top: 40px;
+    z-index: 4;
+    max-width: 200px;
 }
 
 .selected-tooltip__header {
-    font-size: 24px;
+    font-size: 12px;
 }
 
 .selected-tooltip__label-container {
     display: flex;
-    margin-top: 16px;
+    flex-wrap: wrap;
+    margin-top: 8px;
 }
 
 .selected-tooltip__label {
@@ -22,17 +24,17 @@
     flex-direction: column;
 }
 
-.selected-tooltip__label + .selected-tooltip__label {
-    margin-left: 24px;
+.selected-tooltip__label:not(:last-child) {
+    margin-right: 12px;
 }
 
 .selected-tooltip__value {
     font-weight: bold;
-    font-size: 32px;
+    font-size: 16px;
 }
 
 .selected-tooltip__chart-name {
-    margin-top: 8px;
+    margin-top: 4px;
     font-weight: 300;
-    font-size: 24px;
+    font-size: 11px;
 }

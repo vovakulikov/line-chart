@@ -1,8 +1,8 @@
 import getWeekDay from '../utils/get-week-day.js';
 import formatDate from '../utils/format-date.js';
 
-class Tooltip {
 
+class Tooltip {
     static getTooltipTemplate() {
         return `
             <div class="selected-tooltip__header"></div>
@@ -19,13 +19,12 @@ class Tooltip {
     }
 
     updateTooltipData(date, pointsData) {
-        const tooltip = document.querySelector('.selected-tooltip');
-        const header = tooltip.querySelector('.selected-tooltip__header');
-        const labelContainer = tooltip.querySelector('.selected-tooltip__label-container');
+        const header = this.element.querySelector('.selected-tooltip__header');
+        const labelContainer = this.element.querySelector('.selected-tooltip__label-container');
 
         labelContainer.innerHTML = '';
         header.textContent = `${getWeekDay(date)}, ${formatDate(date)}`;
-        tooltip.style.display = 'block';
+        this.element.style.display = 'block';
 
         pointsData.forEach(({color, value, chartName}) => {
             const labelEl = document.createElement('div');
@@ -45,29 +44,30 @@ class Tooltip {
         });
     }
 
-    updateTooltipPosition(xCoord, canvasLeft, canvasRight) {
-        const tooltip = document.querySelector('.selected-tooltip');
+    updateTooltipPosition(xCoord, canvasWidth) {
         const tooltipLeftMargin = -60;
-        let x;
+        const translateY = `translateY(${40}px)`;
+        let translateX;
 
-        if (xCoord > canvasRight || xCoord < canvasLeft) {
-            tooltip.style.display = 'none';
+        if (Math.floor(xCoord) > canvasWidth || Math.ceil(xCoord) < 0) {
+            this.element.style.visibility = 'hidden';
             return;
         }
 
-        const width = tooltip.getBoundingClientRect().width;
+        const width = this.element.getBoundingClientRect().width;
 
-        if (xCoord + width > canvasRight) {
-            x = canvasRight - width;
-        } else if (xCoord + tooltipLeftMargin < canvasLeft) {
-            x = canvasLeft;
+        if (xCoord + width + tooltipLeftMargin > canvasWidth) {
+            translateX = `translateX(${canvasWidth - width}px)`;
+        } else if (width === 0) {
+            translateX = `translateX(${canvasWidth}px)`;
+        } else if (xCoord + tooltipLeftMargin < 0) {
+            translateX = `translateX(0px)`;
         } else {
-            x = xCoord + tooltipLeftMargin;
+            translateX = `translateX(${xCoord + tooltipLeftMargin}px)`;
         }
 
-        tooltip.style.display = 'block';
-
-        tooltip.style.left = `${x}px`;
+        this.element.style.transform = `${translateX} ${translateY}`;
+        this.element.style.visibility = 'visible';
     }
 
 

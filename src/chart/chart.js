@@ -3,12 +3,15 @@ import hexToRGB from '../utils/hex-to-rgb.js';
 import rafThrottle from '../utils/raf-throttle.js';
 import ChartMap from '../chart-map/chart-map.js';
 import ChartLegend from "../legend/chart-legend.js";
+import Tooltip from '../tooltip/tooltip.js';
 
 const LABEL_OFFSET = 40;
 const TOP_OFFSET = 40;
 const HORIZONTAL_LINES = 5;
 const VERTICAL_LINES = 3;
 const DATE_COEF = 1.68;
+const CHART_PADDING = 8;
+const NIGHT_MODE_BG = '#242F3E';
 
 const PRECISION = 5e-10;
 const LABELS_PRECISION = 5e-3;
@@ -44,6 +47,8 @@ class Chart {
 	getTemplate(id = 0) {
 		return `
 			<section class="chart" id="chart-${id}">
+				<div class="selected-tooltip"></div>
+
 				<div class="chart_canvas-wrap">
 					<canvas
 						class="chart__canvas canvas_for-datasets">
@@ -53,6 +58,7 @@ class Chart {
 				
 				<div class="chart__map"></div>
 				<div class="chart__legend chart-legend"></div>
+				
 			</section>
 		`;
 	}
@@ -75,9 +81,10 @@ class Chart {
 	// 	]
 	// };
 
-	constructor({ rootElement, config }) {
+	constructor({ rootElement, config, nightModeButton }) {
 		this.rootElement = rootElement;
 		this.config = config;
+		this.nightModeButton = nightModeButton;
 		this.timeline = this.config.timeline || [];
 		this.datasets = null;
 
@@ -87,6 +94,8 @@ class Chart {
 		this.map = null;
 		this.legend = null;
 		this.legendRootElement = null;
+        this.tooltip = null;
+        this.tooltipRootElement = null;
 
 		this.canvasSize = null;
 		this.virtualWidth = null;
@@ -109,6 +118,9 @@ class Chart {
 		this.isYLabelsAnimating = true;
 		this.isXLabelsAnimating = true;
 		this.rafId = null;
+		this.selectedPointIndex = null;
+		this.selectedPointX = null;
+		this.isNightMode = false;
 
 		this.labelsY = {};
 		this.labelsX = {};
@@ -122,10 +134,12 @@ class Chart {
 		this.rootElement.insertAdjacentHTML('beforeend', this.getTemplate());
 		this.mapRootElement = this.rootElement.querySelector('.chart__map');
 		this.legendRootElement = this.rootElement.querySelector('.chart__legend');
+		this.tooltipRootElement = this.rootElement.querySelector('.selected-tooltip');
 
 		this.map = new ChartMap({
 			rootElement: this.mapRootElement,
-			config: { ...this.config, viewport: this.viewport }
+			config: { ...this.config, viewport: this.viewport },
+			nightModeButton: this.nightModeButton,
 		});
 
 		this.datasetsCanvas = this.rootElement.querySelector('.canvas_for-datasets');
@@ -152,29 +166,66 @@ class Chart {
 			);
 
 		this.map.init();
-		this.map.subscribe((nextViewport) => this.handleViewportChange(nextViewport));
+		this.map.subscribe((nextViewport) => {
+            const tooltipX = this.getAbsoluteXCoordinate(this.selectedPointX, this.offsetX);
+
+            this.tooltip.updateTooltipPosition(tooltipX - CHART_PADDING, this.datasetsCanvas.width);
+            this.shouldRerenderDatasets = true;
+
+            this.handleViewportChange(nextViewport);
+		});
 
 		this.legend = new ChartLegend(this.legendRootElement, this.config);
 		this.legend.init();
-		this.legend.subscribe((event) => this.toggleActiveDatasets(event));
+		this.legend.subscribe((event) => {
+			this.toggleActiveDatasets(event);
 
-		this.composite = composite;
+			const idx = this.selectedPointIndex;
+			const datasets = this.datasets.filter(d => d.targetOpacity !== 0);
+			this.tooltip.updateTooltipData(this.timeline[idx], this.getSelectedPointsData(datasets, idx));
+		});
+
+        this.nightModeButton.subscribe(isNightMode => {
+            this.isNightMode = isNightMode;
+            this.tooltipRootElement.style.backgroundColor = this.isNightMode
+                ? NIGHT_MODE_BG
+                : '#fff';
+            this.tooltipRootElement.style.borderColor = this.isNightMode
+                ? NIGHT_MODE_BG
+                : '#eee';
+            this.tooltipRootElement.querySelector('.selected-tooltip__header').style.color = this.isNightMode
+                ? '#fff'
+                : '#000';
+
+            this.shouldRerenderDatasets = true
+
+			if (!this.rafId) {
+				this.rafId = requestAnimationFrame((ts) => this.scheduleNextFrame(ts));
+			}
+        });
+
+		this.tooltip = new Tooltip(this.tooltipRootElement);
+		this.tooltip.init();
+
+        this.addEventListeners();
+
+        this.composite = composite;
 
 		if (!this.composite) {
 			this.rafId = requestAnimationFrame((ts) => this.scheduleNextFrame(ts));
 		}
 	}
 
-	handleViewportChange(nextViewport) {
-		this.viewport.start = nextViewport.start;
-		this.viewport.end = nextViewport.end;
-		this.shouldRerenderDatasets = true;
-		this.shouldRerenderLabels = true;
+    handleViewportChange(nextViewport) {
+        this.viewport.start = nextViewport.start;
+        this.viewport.end = nextViewport.end;
+        this.shouldRerenderDatasets = true;
+        this.shouldRerenderLabels = true;
 
-		if (!this.rafId) {
-			this.rafId = requestAnimationFrame((ts) => this.scheduleNextFrame(ts));
-		}
-	}
+        if (!this.rafId) {
+            this.rafId = requestAnimationFrame((ts) => this.scheduleNextFrame(ts));
+        }
+    }
 
 	toggleActiveDatasets({ id, checked }) {
 		for(let i = 0; i < this.datasets.length; i++) {
@@ -293,6 +344,22 @@ class Chart {
 			for (let i = 0; i < this.datasets.length; i++) {
 				if (+this.datasets[i].opacity.toFixed(2) > 0) {
 					this.drawChart(this.datasets[i], this.lastRatioY, ratioX);
+				}
+			}
+
+			for (let i = 0; i < this.datasets.length; i++) {
+				if (+this.datasets[i].opacity.toFixed(2) > 0) {
+				    const dataset = this.datasets[i];
+
+                    if (this.selectedPointIndex !== null && dataset.targetOpacity !== 0) {
+                        this.selectedPointX = (this.timeline[this.selectedPointIndex] - this.timeline[0]) * this.lastRatioX;
+
+                        this.drawSelectedPoint(
+                            this.selectedPointX,
+                            this.getRelativeY(chartHeight, dataset.values[this.selectedPointIndex], this.lastRatioY),
+                            dataset.color
+                        );
+                    }
 				}
 			}
 
@@ -499,6 +566,34 @@ class Chart {
 		this.datasetsCtx.restore();
 	}
 
+	getRelativeY(chartHeight, value, ratioY) {
+		return chartHeight - (value - this.lastLowerBorder) * ratioY;
+	}
+
+	drawSelectedPoint(x, y, color) {
+		const r = 6.0;
+
+		this.datasetsCtx.save();
+
+		this.datasetsCtx.lineWidth = 2;
+		this.datasetsCtx.strokeStyle = 'rgba(0, 0, 0, 0.08)';
+		this.datasetsCtx.beginPath();
+		this.datasetsCtx.moveTo(x - r / 2 + 3, 0);
+		this.datasetsCtx.lineTo(x - r / 2 + 3, this.canvasSize.height - LABEL_OFFSET);
+		this.datasetsCtx.stroke();
+
+		this.datasetsCtx.beginPath();
+		this.datasetsCtx.strokeStyle = color;
+		this.datasetsCtx.lineWidth = 6.0;
+		this.datasetsCtx.fillStyle = this.isNightMode
+			? NIGHT_MODE_BG
+			: '#fff';
+		this.datasetsCtx.arc(x - r + 5, y - r + 5, r, 0, Math.PI * 2);
+		this.datasetsCtx.stroke();
+		this.datasetsCtx.fill();
+		this.datasetsCtx.restore();
+	}
+
 	getVerticalBorders(datasets, startDate, dueDate) {
 		let minValue = Infinity;
 		let maxValue = -Infinity;
@@ -519,6 +614,54 @@ class Chart {
 		}
 
 		return [Math.floor(minValue * 0.99 * 1000) / 1000, Math.floor(maxValue * 1.01 * 1000) / 1000];
+	}
+
+	addEventListeners() {
+		this.labelsCanvas.addEventListener('touchstart', event => {
+			const x = event.touches[0].clientX;
+			const virtualX = this.getRelativeXCoordinate(x, this.offsetX);
+			const i = Math.round(virtualX * (this.timeline.length - 1) / this.virtualWidth);
+			const idx = Math.max(0, Math.min(this.timeline.length, i));
+			const pointsData = this.getSelectedPointsData(this.getRenderedDatasets(), idx);
+
+			this.selectedPointIndex = idx;
+			this.selectedPointX = (this.timeline[idx] - this.timeline[0]) * this.lastRatioX;
+			this.tooltip.updateTooltipData(this.timeline[idx], pointsData);
+
+			const tooltipX = Math.floor(this.getAbsoluteXCoordinate(this.selectedPointX, this.offsetX));
+
+			this.tooltip.updateTooltipPosition(tooltipX - CHART_PADDING, this.datasetsCanvas.width);
+
+			this.shouldRerenderDatasets = true;
+
+			if (!this.rafId) {
+				this.rafId = requestAnimationFrame((ts) => this.scheduleNextFrame(ts));
+			}
+
+			event.preventDefault();
+		});
+	};
+
+	getRenderedDatasets() {
+		return this.datasets.filter(dataset => +dataset.opacity.toFixed(2) > 0);
+	}
+
+	getSelectedPointsData(datasets, idx) {
+		return datasets.map(dataset => {
+			return {
+				color: dataset.color,
+				value: dataset.values[idx],
+				chartName: this.config.names[Object.keys(this.config.names).find(key => key === dataset.id)],
+			}
+		});
+	}
+
+	getRelativeXCoordinate(xCoord, offsetX) {
+		return xCoord - offsetX - CHART_PADDING;
+	}
+
+	getAbsoluteXCoordinate(xCoord, offsetX) {
+		return xCoord + offsetX + CHART_PADDING;
 	}
 }
 

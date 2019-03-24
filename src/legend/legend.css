@@ -73,3 +73,7 @@
     user-select: none;
     -moz-user-select: none;
 }
+
+.chart__legend--night-mode .legend-button__text {
+    color: #fff;
+}

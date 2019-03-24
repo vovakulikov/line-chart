@@ -187,17 +187,27 @@ class Chart {
 
         this.nightModeButton.subscribe(isNightMode => {
             this.isNightMode = isNightMode;
-            this.tooltipRootElement.style.backgroundColor = this.isNightMode
-                ? NIGHT_MODE_BG
-                : '#fff';
-            this.tooltipRootElement.style.borderColor = this.isNightMode
-                ? NIGHT_MODE_BG
-                : '#eee';
-            this.tooltipRootElement.querySelector('.selected-tooltip__header').style.color = this.isNightMode
-                ? '#fff'
-                : '#000';
+            let tooltipBg;
+            let tooltipBorder;
+            let tooltipHeader;
 
-            this.shouldRerenderDatasets = true
+            if (this.isNightMode) {
+				tooltipBg = NIGHT_MODE_BG;
+				tooltipBorder = NIGHT_MODE_BG;
+				tooltipHeader = '#fff';
+			} else {
+				tooltipBg = '#fff';
+				tooltipBorder = '#eee';
+				tooltipHeader = '#000';
+			}
+
+            this.tooltipRootElement.style.backgroundColor = tooltipBg;
+            this.tooltipRootElement.style.borderColor = tooltipBorder;
+            this.tooltipRootElement.querySelector('.selected-tooltip__header').style.color = tooltipHeader;
+
+			this.legendRootElement.classList.toggle('chart__legend--night-mode');
+
+			this.shouldRerenderDatasets = true;
 
 			if (!this.rafId) {
 				this.rafId = requestAnimationFrame((ts) => this.scheduleNextFrame(ts));

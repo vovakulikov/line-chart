@@ -2,9 +2,16 @@
     display: block;
     color: rgb(0, 136, 204);
     font-size: 16px;
-    margin: 32px auto 16px;
+    padding: 16px;
     cursor: pointer;
     font-weight: 400;
+
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    width: 100%;
+    z-index: 9999;
+    background-color: white;
 }
 
 .night-mode-button:active {

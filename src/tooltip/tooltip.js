@@ -92,6 +92,10 @@ class Tooltip {
 
         return false;
     }
+
+	hide() {
+		this.element.style.visibility = 'hidden';
+	}
 }
 
 export default Tooltip;

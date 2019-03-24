@@ -1,5 +1,6 @@
 class NightModeButton {
     constructor(element, isNightMode) {
+        this.element = element;
         this.isNightMode = isNightMode;
         this.backgroundColor = {
             day: '#fff',
@@ -7,15 +8,18 @@ class NightModeButton {
         };
         this.subscibers = [];
 
-        element.addEventListener('click', () => {
-            this.isNightMode = !this.isNightMode;
-            element.textContent = `Switch to ${this.isNightMode ? 'Day' : 'Night'} mode`;
-					  document.body.classList.toggle('night-mode_is-on');
-            document.body.style.backgroundColor = this.isNightMode ? this.backgroundColor.night : this.backgroundColor.day;
-					  element.style.backgroundColor = this.isNightMode ? this.backgroundColor.night : this.backgroundColor.day;
+        this.element.addEventListener('click', this.clickListener.bind(this));
+    }
 
-            this.subscibers.forEach((callback) => callback(this.isNightMode));
-        });
+    clickListener(event) {
+        event.stopPropagation();
+        this.isNightMode = !this.isNightMode;
+        this.element.textContent = `Switch to ${this.isNightMode ? 'Day' : 'Night'} mode`;
+        document.body.classList.toggle('night-mode_is-on');
+        document.body.style.backgroundColor = this.isNightMode ? this.backgroundColor.night : this.backgroundColor.day;
+        this.element.style.backgroundColor = this.isNightMode ? this.backgroundColor.night : this.backgroundColor.day;
+
+        this.subscibers.forEach((callback) => callback(this.isNightMode));
     }
 
     subscribe(callback) {

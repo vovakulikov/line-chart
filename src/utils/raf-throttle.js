@@ -1,5 +1,4 @@
 
-// [VK] TODO Add description of this function
 export default function rafThrottle(f, time) {
 	let lastCallTime = performance.now();
 	let lastArgs;

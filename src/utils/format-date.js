@@ -1,6 +1,5 @@
 
 export default function formatDate(ts) {
-	// TODO: refactor this (toLocaleString?)
 	const date = new Date(ts);
 	const month_names_short = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 

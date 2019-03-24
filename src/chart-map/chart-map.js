@@ -43,9 +43,11 @@ class ChartMap {
 	// 		}
 	// 	]
 	// };
-	constructor({ rootElement, config }) {
+	constructor({ rootElement, config, nightModeButton }) {
 		this.rootElement = rootElement;
 		this.config = config;
+		this.nightModeButton = nightModeButton;
+
 		this.timeline = this.config.timeline || [];
 		this.viewport = this.config.viewport || {};
 		this.datasets = null;
@@ -59,6 +61,7 @@ class ChartMap {
 		this.ratioX = null;
 		this.prevTs = null;
 		this.shouldRender = true;
+		this.isNightMode = false;
 		this.subscribers = [];
 
 		this.maxY = 0;
@@ -94,6 +97,13 @@ class ChartMap {
 					targetOpacity: 1,
 				})
 			);
+
+		this.nightModeButton.subscribe(isNightMode => {
+			this.isNightMode = isNightMode;
+			this.sliderElement.style.boxShadow = this.isNightMode
+				? 'none'
+				: '0 20px 20px 9999px #e0e2e466';
+		});
 
 		this.addEventListeners();
 	}
@@ -133,7 +143,9 @@ class ChartMap {
 		for (let i = 0; i < this.datasets.length; i++) {
 			if (this.datasets[i].id === id) {
 				this.datasets[i].targetOpacity = 0;
-			} else {
+			}
+
+			if (this.datasets[i].targetOpacity === 1){
 				stayOnDatasets.push(this.datasets[i]);
 			}
 		}
@@ -208,6 +220,7 @@ class ChartMap {
 
 		this.ctx.save();
 		this.ctx.lineWidth = 2;
+		this.ctx.lineJoin = 'round';
 		this.ctx.beginPath();
 		this.ctx.strokeStyle = hexToRGB(color, opacity);
 

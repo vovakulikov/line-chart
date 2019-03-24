@@ -8,6 +8,7 @@
 body {
     font-family: sans-serif;
     padding: 8px;
+    overflow-x: hidden;
 }
 
 .chart_canvas-wrap {

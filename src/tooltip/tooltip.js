@@ -10,8 +10,9 @@ class Tooltip {
 		`;
     }
 
-    constructor(element) {
+    constructor(element, datasetsCanvas) {
         this.element = element;
+        this.datasetsCanvas = datasetsCanvas;
     }
 
     init() {
@@ -44,10 +45,9 @@ class Tooltip {
         });
     }
 
-    updateTooltipPosition(xCoord, canvasWidth) {
-        const tooltipLeftMargin = -24;
-        const translateY = `translateY(${16}px)`;
-        let translateX;
+    updateTooltipPosition({ xCoord, canvasWidth, pointValues, canvasHeight }) {
+        let tooltipLeftMargin = -24;
+        const translateY = 40;
 
         if (Math.floor(xCoord) > canvasWidth || Math.ceil(xCoord) < 0) {
             this.element.style.visibility = 'hidden';
@@ -56,25 +56,46 @@ class Tooltip {
 
         const width = this.element.getBoundingClientRect().width;
 
-        if (xCoord + width + tooltipLeftMargin > canvasWidth) {
-            translateX = `translateX(${canvasWidth - width}px)`;
-        } else if (width === 0) {
-            translateX = `translateX(${canvasWidth}px)`;
-        } else if (xCoord + tooltipLeftMargin < 0) {
-            translateX = `translateX(0px)`;
-        } else {
-            translateX = `translateX(${xCoord + tooltipLeftMargin}px)`;
+        if (this.isOverDataPoint(pointValues, canvasHeight, translateY)) {
+            if (xCoord + width > canvasWidth) {
+                tooltipLeftMargin = -16 - width;
+            } else {
+                tooltipLeftMargin = 16;
+            }
         }
 
-        this.element.style.transform = `${translateX} ${translateY}`;
+        let translateX;
+
+        if (xCoord + width + tooltipLeftMargin > canvasWidth) {
+            translateX = canvasWidth - width;
+        } else if (width === 0) {
+            translateX = canvasWidth;
+        } else if (xCoord + tooltipLeftMargin < 0) {
+            translateX = 0;
+        } else {
+            translateX = xCoord + tooltipLeftMargin;
+        }
+
+        this.element.style.transform = `translateX(${translateX}px) translateY(${translateY}px)`;
         this.element.style.visibility = 'visible';
     }
 
-    hide() {
-			this.element.style.visibility = 'hidden';
+    isOverDataPoint(pointValues, canvasHeight, offsetTop) {
+        const top = canvasHeight - offsetTop;
+        const bottom = top - this.element.getBoundingClientRect().height;
+
+        for (let i = 0; i < pointValues.length; i++) {
+            if (pointValues[i] > bottom) {
+                return true;
+            }
+        }
+
+        return false;
     }
 
-
+	hide() {
+		this.element.style.visibility = 'hidden';
+	}
 }
 
 export default Tooltip;

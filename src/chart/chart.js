@@ -370,14 +370,14 @@ class Chart {
 		}
 
 		if (this.shouldRerenderLabels || isLowerBorderChanging || isRatioYChanging) {
-			this.labelsCtx.setTransform(this.devicePixelRatio, 0, 0, this.devicePixelRatio, this.offsetX * 2, 0);
+			this.labelsCtx.setTransform(this.devicePixelRatio, 0, 0, this.devicePixelRatio, this.offsetX * this.devicePixelRatio, 0);
 			this.labelsCtx.clearRect(0, 0, this.virtualWidth, this.canvasSize.height);
 
 			this.drawGrid(ratioY, this.ratioX, this.lowerBorder);
 		}
 
 		if (this.shouldRerenderDatasets || shouldRerenderDatasets || isRatioYChanging || isLowerBorderChanging) {
-			this.datasetsCtx.setTransform(this.devicePixelRatio, 0, 0, this.devicePixelRatio, this.offsetX * 2, 0);
+			this.datasetsCtx.setTransform(this.devicePixelRatio, 0, 0, this.devicePixelRatio, this.offsetX * this.devicePixelRatio, 0);
 			this.datasetsCtx.clearRect(0, 0, this.virtualWidth, this.canvasSize.height);
 
 			this.selectedPointX = (this.timeline[this.selectedPointIndex] - this.timeline[0]) * this.ratioX;

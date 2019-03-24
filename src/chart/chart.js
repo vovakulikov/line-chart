@@ -4,7 +4,7 @@ import rafThrottle from '../utils/raf-throttle.js';
 import ChartMap from '../chart-map/chart-map.js';
 import ChartLegend from "../legend/chart-legend.js";
 
-const LABEL_OFFSET = 40;
+const LABEL_OFFSET = 30;
 const TOP_OFFSET = 40;
 const HORIZONTAL_LINES = 5;
 const VERTICAL_LINES = 3;
@@ -37,22 +37,6 @@ function getLowerBorder(minY, maxY, lowerBorder) {
 	return lowerLine === lowerBorder
 		? lowerBorder
 		: Math.floor(getLowerBorder(minY, maxY, lowerLine))
-}
-
-function setupCanvas(canvas) {
-	// Get the device pixel ratio, falling back to 1.
-	var dpr = window.devicePixelRatio || 1;
-	// Get the size of the canvas in CSS pixels.
-	var rect = canvas.getBoundingClientRect();
-	// Give the canvas pixel dimensions of their CSS
-	// size * the device pixel ratio.
-	canvas.width = rect.width * dpr;
-	canvas.height = rect.height * dpr;
-	var ctx = canvas.getContext('2d');
-	// Scale all drawing operations by the dpr, so you
-	// don't have to worry about the difference.
-	// ctx.scale(dpr, dpr);
-	return ctx;
 }
 
 class Chart {
@@ -105,6 +89,7 @@ class Chart {
 		this.legendRootElement = null;
 
 		this.canvasSize = null;
+		this.devicePixelRatio = null;
 		this.virtualWidth = null;
 		this.offsetX = null;
 		this.viewport = { start: 0.5, end: 1.0 };
@@ -129,31 +114,25 @@ class Chart {
 		this.labelsY = {};
 		this.labelsX = {};
 
-		this.composite = false;
-
 		[this.getVerticalBorders, this.forceUpdateGVB] = rafThrottle(this.getVerticalBorders.bind(this), 250)
 	}
 
-	init({ composite = false } = {}) {
+	init() {
 		this.rootElement.insertAdjacentHTML('beforeend', this.getTemplate());
 		this.mapRootElement = this.rootElement.querySelector('.chart__map');
 		this.legendRootElement = this.rootElement.querySelector('.chart__legend');
 
-		this.map = new ChartMap({
-			rootElement: this.mapRootElement,
-			config: { ...this.config, viewport: this.viewport }
-		});
-
 		this.datasetsCanvas = this.rootElement.querySelector('.canvas_for-datasets');
 		this.labelsCanvas = this.rootElement.querySelector('.canvas_for-labels');
-		this.datasetsCtx = setupCanvas(this.datasetsCanvas);
-		this.labelsCtx = setupCanvas(this.labelsCanvas);
+		this.datasetsCtx = this.datasetsCanvas.getContext('2d');
+		this.labelsCtx = this.labelsCanvas.getContext('2d');
+		this.devicePixelRatio = window.devicePixelRatio || 1;
 		this.canvasSize = this.datasetsCanvas.getBoundingClientRect();
 
-		// this.datasetsCanvas.width = this.canvasSize.width;
-		// this.datasetsCanvas.height = this.canvasSize.height;
-		// this.labelsCanvas.width = this.canvasSize.width;
-		// this.labelsCanvas.height = this.canvasSize.height;
+		this.datasetsCanvas.width = this.canvasSize.width * this.devicePixelRatio;
+		this.datasetsCanvas.height = this.canvasSize.height * this.devicePixelRatio;
+		this.labelsCanvas.width = this.canvasSize.width * this.devicePixelRatio;
+		this.labelsCanvas.height = this.canvasSize.height * this.devicePixelRatio;
 
 		this.virtualWidth = calculateVirtualWidth(this.canvasSize.width, this.viewport);
 
@@ -168,18 +147,20 @@ class Chart {
 				})
 			);
 
+		this.map = new ChartMap({
+			rootElement: this.mapRootElement,
+			config: { ...this.config, viewport: this.viewport }
+		});
+
 		this.map.init();
 		this.map.subscribe((nextViewport) => this.handleViewportChange(nextViewport));
 
 		this.legend = new ChartLegend(this.legendRootElement, this.config);
+
 		this.legend.init();
 		this.legend.subscribe((event) => this.toggleActiveDatasets(event));
 
-		this.composite = composite;
-
-		if (!this.composite) {
-			this.rafId = requestAnimationFrame((ts) => this.scheduleNextFrame(ts));
-		}
+		this.rafId = requestAnimationFrame((ts) => this.scheduleNextFrame(ts));
 	}
 
 	handleViewportChange(nextViewport) {
@@ -188,6 +169,7 @@ class Chart {
 		this.shouldRerenderDatasets = true;
 		this.shouldRerenderLabels = true;
 
+		// if we already has working loop we should not run another one
 		if (!this.rafId) {
 			this.rafId = requestAnimationFrame((ts) => this.scheduleNextFrame(ts));
 		}
@@ -205,6 +187,7 @@ class Chart {
 		this.shouldRerenderLabels = true;
 		this.forceUpdateGVB();
 
+		// if we already has working loop we should not run another one
 		if (!this.rafId) {
 			this.rafId = requestAnimationFrame((ts) => this.scheduleNextFrame(ts));
 		}
@@ -213,7 +196,7 @@ class Chart {
 	scheduleNextFrame(ts) {
 		// Experimental optimization
 		if (!this.shouldRerenderDatasets && !this.shouldRerenderLabels) {
-			console.log('do not render at all');
+			// Maybe we don't need this line
 			cancelAnimationFrame(this.rafId);
 			this.rafId = null;
 
@@ -224,12 +207,13 @@ class Chart {
 		this.update(ts);
 	}
 
+	// Just for init force get vertical borders method
 	forceUpdateGVB() {};
 
 	update(ts) {
 		const prevTs = this.prevTs || ts;
 		// update prev timestamp
-		this.delta = Math.min(100, ts - prevTs);
+		this.delta = Math.min(20, ts - prevTs);
 		this.virtualWidth = calculateCanvasWidth(this.canvasSize.width, this.viewport);
 		this.offsetX = getViewportOffset(this.virtualWidth, this.viewport.start);
 		this.prevTs = ts;
@@ -268,6 +252,7 @@ class Chart {
 		const ratioY = chartHeight / (this.max - this.lowerBorder);
 		const ratioX = this.virtualWidth / this.timelineDiff;
 
+		// Spring lower border
 		if (this.lastLowerBorder != null) {
 			const diff = this.lowerBorder - this.lastLowerBorder;
 
@@ -280,6 +265,7 @@ class Chart {
 			this.lastLowerBorder = this.lowerBorder;
 		}
 
+		// Spring ratioY
 		if (this.lastRatioY != null) {
 			const diff = ratioY - this.lastRatioY;
 
@@ -292,21 +278,17 @@ class Chart {
 			this.lastRatioY = ratioY;
 		}
 
-
 		if (this.shouldRerenderLabels || isLowerBorderChanging || isRatioYChanging) {
-
-			this.labelsCtx.setTransform(2, 0, 0, 2, this.offsetX * 2, 0);
+			this.labelsCtx.setTransform(this.devicePixelRatio, 0, 0, this.devicePixelRatio, this.offsetX * 2, 0);
 			this.labelsCtx.clearRect(0, 0, this.virtualWidth, this.canvasSize.height);
 
 			this.drawGrid(ratioY, ratioX, this.lowerBorder);
-		} else {
-			console.log('not render labels');
 		}
 
 		if (this.shouldRerenderDatasets || shouldRerenderDatasets || isRatioYChanging || isLowerBorderChanging) {
 			this.lastRatioX = ratioX;
 
-			this.datasetsCtx.setTransform(2, 0, 0, 2, this.offsetX * 2, 0);
+			this.datasetsCtx.setTransform(this.devicePixelRatio, 0, 0, this.devicePixelRatio, this.offsetX * 2, 0);
 			this.datasetsCtx.clearRect(0, 0, this.virtualWidth, this.canvasSize.height);
 
 			for (let i = 0; i < this.datasets.length; i++) {
@@ -315,13 +297,42 @@ class Chart {
 				}
 			}
 
-		} else {
-			console.log('no rerender dataset!!!!');
 		}
 
 		this.shouldRerenderLabels = this.isXLabelsAnimating || this.isYLabelsAnimating;
 		this.shouldRerenderDatasets = shouldRerenderDatasets || isRatioYChanging || isLowerBorderChanging;
+
+		// Update springs at chart map
 		this.map.update(ts);
+	}
+
+	drawGrid(ratioY, ratioX, lowerBorder) {
+		this.drawXLabels(ratioX);
+		this.drawYLabels(ratioY, lowerBorder);
+	}
+
+	drawChart(dataset, ratioY, ratioX) {
+		const { color, opacity } = dataset;
+		const updatedColor = hexToRGB(color, opacity);
+		const chartHeight = this.canvasSize.height - LABEL_OFFSET;
+		let y = chartHeight - (dataset.values[0] - this.lastLowerBorder) * ratioY;
+
+		this.datasetsCtx.save();
+
+		this.datasetsCtx.lineWidth = 2.0;
+		this.datasetsCtx.lineJoin = 'round';
+		this.datasetsCtx.beginPath();
+		this.datasetsCtx.moveTo(0, y);
+		this.datasetsCtx.strokeStyle = updatedColor;
+
+		for(let i = 0; i < dataset.values.length; i++) {
+			y = chartHeight - (dataset.values[i] - this.lastLowerBorder) * ratioY;
+
+			this.datasetsCtx.lineTo((this.timeline[i] - this.timeline[0]) * ratioX, y);
+		}
+
+		this.datasetsCtx.stroke();
+		this.datasetsCtx.restore();
 	}
 
 	drawYLabels(ratioY, lowerBorder) {
@@ -393,7 +404,7 @@ class Chart {
 			this.labelsCtx.lineTo(this.virtualWidth, +y.toPrecision(4));
 			this.labelsCtx.fillStyle = `rgba(0,0,0, ${label.opacity.toPrecision(3)})`;
 			this.labelsCtx.strokeStyle = `rgba(0, 0, 0, ${label.strokeOpacity})`;
-			this.labelsCtx.fillText(Math.floor(label.currentValue), offsetX + 10, y - 6);
+			this.labelsCtx.fillText(Math.floor(label.currentValue).toString(), offsetX + 10, y - 6);
 			this.labelsCtx.stroke();
 
 			this.labelsCtx.restore();
@@ -403,7 +414,7 @@ class Chart {
 		this.isYLabelsAnimating = isLabelsAnimating;
 	}
 
-	dragXLabels(ratioX) {
+	drawXLabels(ratioX) {
 		const initStep = this.timelineDiff / VERTICAL_LINES;
 		const newLabelsX = [];
 		const p = 0.005 * this.delta;
@@ -459,7 +470,7 @@ class Chart {
 
 		this.labelsCtx.save();
 
-		this.labelsCtx.font = `14px Arial`;
+		this.labelsCtx.font = `13px Arial`;
 		this.labelsCtx.fillStyle = 'rgba(0, 0, 0, 0.4)';
 
 		let isLabelsAnimating = false;
@@ -481,41 +492,12 @@ class Chart {
 			this.labelsCtx.moveTo(label.x, this.canvasSize.height);
 
 			this.labelsCtx.fillStyle = `rgba(0,0,0, ${label.opacity.toPrecision(3)})`;
-			this.labelsCtx.fillText(label.text, x, this.canvasSize.height - 20);
+			this.labelsCtx.fillText(label.text, x, this.canvasSize.height - 10);
 			this.labelsCtx.restore();
 		}
 
 		this.labelsCtx.restore();
 		this.isXLabelsAnimating = isLabelsAnimating;
-	}
-
-	drawGrid(ratioY, ratioX, lowerBorder) {
-		this.dragXLabels(ratioX);
-		this.drawYLabels(ratioY, lowerBorder);
-	}
-
-	drawChart(dataset, ratioY, ratioX) {
-		const { color, opacity } = dataset;
-		const updatedColor = hexToRGB(color, opacity);
-		const chartHeight = this.canvasSize.height - LABEL_OFFSET;
-		let y = chartHeight - (dataset.values[0] - this.lastLowerBorder) * ratioY;
-
-		this.datasetsCtx.save();
-
-		this.datasetsCtx.lineWidth = 3.0;
-		this.datasetsCtx.lineJoin = 'round';
-		this.datasetsCtx.beginPath();
-		this.datasetsCtx.moveTo(0, y);
-		this.datasetsCtx.strokeStyle = updatedColor;
-
-		for(let i = 0; i < dataset.values.length; i++) {
-			y = chartHeight - (dataset.values[i] - this.lastLowerBorder) * ratioY;
-
-			this.datasetsCtx.lineTo((this.timeline[i] - this.timeline[0]) * ratioX, y);
-		}
-
-		this.datasetsCtx.stroke();
-		this.datasetsCtx.restore();
 	}
 
 	getVerticalBorders(datasets, startDate, dueDate) {

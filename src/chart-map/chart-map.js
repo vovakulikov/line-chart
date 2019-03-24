@@ -54,6 +54,7 @@ class ChartMap {
 		this.leftHandElement = null;
 		this.rightHandElement = null;
 		this.canvasSize = null;
+		this.devicePixelRatio = null;
 		this.ctx = null;
 		this.ratioY = null;
 		this.ratioX = null;
@@ -73,9 +74,10 @@ class ChartMap {
 		this.leftHandElement = this.rootElement.querySelector('.chart-map__left-hand');
 		this.rightHandElement = this.rootElement.querySelector('.chart-map__right-hand');
 		this.canvasSize = this.canvas.getBoundingClientRect();
+		this.devicePixelRatio = window.devicePixelRatio || 1;
 
-		this.canvas.width = this.canvasSize.width;
-		this.canvas.height = this.canvasSize.height;
+		this.canvas.width = this.canvasSize.width * this.devicePixelRatio;
+		this.canvas.height = this.canvasSize.height * this.devicePixelRatio;
 
 		this.sliderElement.style.width = `${(this.viewport.end - this.viewport.start) * this.canvasSize.width}px`;
 		this.sliderElement.style.transform = `translateX(${this.viewport.start * this.canvasSize.width}px)`;
@@ -99,9 +101,13 @@ class ChartMap {
 	}
 
 	addEventListeners() {
-		this.sliderElement.addEventListener('touchstart', (event) => this.sliderTouchHandle(event));
-		this.leftHandElement.addEventListener('touchstart', (event) => this.leftHandTouchHandle(event));
-		this.rightHandElement.addEventListener('touchstart', (event) => this.rightHandTouchHandle(event));
+		this.sliderElement.addEventListener('touchstart', (event) => this.sliderTouchHandle(event, true));
+		this.leftHandElement.addEventListener('touchstart', (event) => this.leftHandTouchHandle(event, true));
+		this.rightHandElement.addEventListener('touchstart', (event) => this.rightHandTouchHandle(event, true));
+
+		this.sliderElement.addEventListener('mousedown', (event) => this.sliderTouchHandle(event));
+		this.leftHandElement.addEventListener('mousedown', (event) => this.leftHandTouchHandle(event));
+		this.rightHandElement.addEventListener('mousedown', (event) => this.rightHandTouchHandle(event));
 	};
 
 	subscribe(callback) {
@@ -201,6 +207,7 @@ class ChartMap {
 		}
 
 		this.shouldRender = shouldRenderOnNextTick;
+		this.ctx.setTransform(this.devicePixelRatio, 0, 0, this.devicePixelRatio, 0, 0);
 		this.ctx.clearRect(0, 0, this.canvasSize.width, this.canvasSize.height);
 		this.datasets.forEach((dataset) => this.drawChart(dataset));
 	}
@@ -225,9 +232,13 @@ class ChartMap {
 		this.ctx.restore();
 	}
 
-	sliderTouchHandle(event) {
-		event = event.touches[0];
+	sliderTouchHandle(event, isTouchEvent = false) {
+		if (isTouchEvent) {
+			event = event.touches[0];
+		}
 
+		const moveEvent = isTouchEvent ? 'touchmove' : 'mousemove';
+		const upEvent = isTouchEvent ? 'touchend' : 'mouseup';
 		const wrapCoords = getCoords(this.canvas);
 		const coords = getCoords(event.target);
 		const startX = coords.left - wrapCoords.left;
@@ -238,7 +249,10 @@ class ChartMap {
 
 		const move = (event) => {
 			event.stopImmediatePropagation();
-			event = event.touches[0];
+
+			if (isTouchEvent) {
+				event = event.touches[0];
+			}
 
 			const delta = event.pageX - originEventX;
 
@@ -270,18 +284,23 @@ class ChartMap {
 		};
 
 		function cleanUp() {
-			document.removeEventListener('touchmove', move);
-			document.removeEventListener('touchend', cleanUp);
+			document.removeEventListener(moveEvent, move);
+			document.removeEventListener(upEvent, cleanUp);
 		}
 
-		document.addEventListener('touchmove', move);
-		document.addEventListener('touchend', cleanUp);
+		document.addEventListener(moveEvent, move);
+		document.addEventListener(upEvent, cleanUp);
 	}
 
-	rightHandTouchHandle(event) {
+	rightHandTouchHandle(event, isTouchEvent = false) {
 		event.stopImmediatePropagation();
-		event = event.touches[0];
 
+		if (isTouchEvent) {
+			event = event.touches[0];
+		}
+
+		const moveEvent = isTouchEvent ? 'touchmove' : 'mousemove';
+		const upEvent = isTouchEvent ? 'touchend' : 'mouseup';
 		const wrapCoords = getCoords(this.canvas);
 		const sliderCoords = getCoords(this.sliderElement);
 		const originEventX = event.pageX;
@@ -290,7 +309,10 @@ class ChartMap {
 
 		const changeWidth = (event) => {
 			event.stopImmediatePropagation();
-			event = event.touches[0];
+
+			if (isTouchEvent) {
+				event = event.touches[0];
+			}
 
 			const delta = event.pageX - originEventX;
 			const newWidth = originWidth + delta;
@@ -323,18 +345,23 @@ class ChartMap {
 		};
 
 		function cleanUp() {
-			document.removeEventListener('touchmove', changeWidth);
-			document.removeEventListener('touchend', cleanUp);
+			document.removeEventListener(moveEvent, changeWidth);
+			document.removeEventListener(upEvent, cleanUp);
 		}
 
-		document.addEventListener('touchmove', changeWidth);
-		document.addEventListener('touchend', cleanUp);
+		document.addEventListener(moveEvent, changeWidth);
+		document.addEventListener(upEvent, cleanUp);
 	}
 
-	leftHandTouchHandle(event) {
+	leftHandTouchHandle(event, isTouchEvent = false) {
 		event.stopImmediatePropagation();
-		event = event.touches[0];
 
+		if (isTouchEvent) {
+			event = event.touches[0];
+		}
+
+		const moveEvent = isTouchEvent ? 'touchmove' : 'mousemove';
+		const upEvent = isTouchEvent ? 'touchend' : 'mouseup';
 		const wrapCoords = getCoords(this.canvas);
 		const sliderCoords = getCoords(this.sliderElement);
 
@@ -345,7 +372,10 @@ class ChartMap {
 
 		const changeWidth = (event) => {
 			event.stopImmediatePropagation();
-			event = event.touches[0];
+
+			if (isTouchEvent) {
+				event = event.touches[0];
+			}
 
 			const delta = event.pageX - originEventX;
 			const newWidth = originWidth + -1 * delta;
@@ -377,12 +407,12 @@ class ChartMap {
 		};
 
 		function cleanUp() {
-			document.removeEventListener('touchmove', changeWidth);
-			document.removeEventListener('touchend', cleanUp);
+			document.removeEventListener(moveEvent, changeWidth);
+			document.removeEventListener(upEvent, cleanUp);
 		}
 
-		document.addEventListener('touchmove', changeWidth);
-		document.addEventListener('touchend', cleanUp);
+		document.addEventListener(moveEvent, changeWidth);
+		document.addEventListener(upEvent, cleanUp);
 	}
 }
 

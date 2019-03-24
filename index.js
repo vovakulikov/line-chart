@@ -1,8 +1,6 @@
-
-import Chart from '../src/chart/chart.js';
-import ChartComposer from '../src/chart-composer.js';
-import parseData from '../src/utils/parse-data.js';
-import NightModeButton from "../src/night-mode-button/night-mode-button.js";
+import Chart from './src/chart/chart.js';
+import parseData from './src/utils/parse-data.js';
+import NightModeButton from "./src/night-mode-button/night-mode-button.js";
 
 
 async function main () {
@@ -24,23 +22,6 @@ async function main () {
 
 		chart.init();
 	}
-
-	// for(let i = 0; i < data.length; i++) {
-	// 	const chartContainer = document.createElement('div');
-	// 	rootElement.appendChild(chartContainer);
-	//
-	// 	charts.push(
-	// 		new Chart({ rootElement: chartContainer, config: data[i] })
-	// 	);
-	// }
-	//
-	// const chartsComposer = new ChartComposer(charts);
-	//
-	// chartsComposer.start();
-
-	// const chart = new Chart({ rootElement: rootElement, config: data[0] });
-	// chart.init();
-
 }
 
 

@@ -3,7 +3,7 @@ import hexToRGB from '../utils/hex-to-rgb.js';
 import rafThrottle from '../utils/raf-throttle.js';
 import debounce from '../utils/debounce.js';
 import ChartMap from '../chart-map/chart-map.js';
-import ChartLegend from "../legend/chart-legend.js";
+import ChartLegend from "../chart-legend/chart-legend.js";
 import Tooltip from '../tooltip/tooltip.js';
 
 const LABEL_OFFSET = 30;
@@ -18,10 +18,6 @@ const PRECISION = 5e-10;
 const LABELS_PRECISION = 5e-3;
 
 function calculateCanvasWidth (containerWidth, {start, end}) {
-	return containerWidth / (end - start);
-}
-
-function calculateVirtualWidth(containerWidth, {start, end}) {
 	return containerWidth / (end - start);
 }
 
@@ -150,8 +146,6 @@ class Chart {
 
 		this.devicePixelRatio = window.devicePixelRatio || 1;
 		this.updateSizes();
-		// this.virtualWidth = calculateVirtualWidth(this.canvasSize.width * this.devicePixelRatio, this.viewport);
-		// this.offsetX = getViewportOffset(this.virtualWidth, this.viewport.start);
 
 		this.datasets = this.config.datasets
 			.map((dataset) => ({
@@ -613,35 +607,6 @@ class Chart {
 		this.isXLabelsAnimating = isLabelsAnimating;
 	}
 
-	// drawGrid(ratioY, ratioX, lowerBorder) {
-	// 	this.dragXLabels(ratioX);
-	// 	this.drawYLabels(ratioY, lowerBorder);
-	// }
-	//
-	// drawChart(dataset, ratioY, ratioX) {
-	// 	const { color, opacity } = dataset;
-	// 	const updatedColor = hexToRGB(color, opacity);
-	// 	const chartHeight = this.canvasSize.height - LABEL_OFFSET;
-	// 	let y = chartHeight - (dataset.values[0] - this.lastLowerBorder) * ratioY;
-	//
-	// 	this.datasetsCtx.save();
-	//
-	// 	this.datasetsCtx.lineWidth = 3.0;
-	// 	this.datasetsCtx.lineJoin = 'round';
-	// 	this.datasetsCtx.beginPath();
-	// 	this.datasetsCtx.moveTo(0, y);
-	// 	this.datasetsCtx.strokeStyle = updatedColor;
-	//
-	// 	for(let i = 0; i < dataset.values.length; i++) {
-	// 		y = chartHeight - (dataset.values[i] - this.lastLowerBorder) * ratioY;
-	//
-	// 		this.datasetsCtx.lineTo((this.timeline[i] - this.timeline[0]) * ratioX, y);
-	// 	}
-	//
-	// 	this.datasetsCtx.stroke();
-	// 	this.datasetsCtx.restore();
-	// }
-
 	getRelativeY(chartHeight, value, ratioY) {
 		return chartHeight - (value - this.lastLowerBorder) * ratioY;
 	}
@@ -664,7 +629,7 @@ class Chart {
 
 		this.datasetsCtx.beginPath();
 		this.datasetsCtx.strokeStyle = color;
-		this.datasetsCtx.lineWidth = 6.0;
+		this.datasetsCtx.lineWidth = 4.0;
 		this.datasetsCtx.fillStyle = this.isNightMode
 			? NIGHT_MODE_BG
 			: '#fff';
@@ -698,8 +663,6 @@ class Chart {
 
 	addEventListeners() {
 		this.labelsCanvas.addEventListener('touchstart', event => {
-			event.preventDefault();
-
 			const x = event.touches[0].clientX;
 			const virtualX = this.getRelativeXCoordinate(x, this.offsetX);
 			const i = Math.round(virtualX * (this.timeline.length - 1) / this.virtualWidth);

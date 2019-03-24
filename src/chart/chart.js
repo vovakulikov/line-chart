@@ -2,6 +2,7 @@ import formatDate from '../utils/format-date.js';
 import hexToRGB from '../utils/hex-to-rgb.js';
 import rafThrottle from '../utils/raf-throttle.js';
 import debounce from '../utils/debounce.js';
+import clickOutside from '../utils/outside-click.js';
 import ChartMap from '../chart-map/chart-map.js';
 import ChartLegend from "../chart-legend/chart-legend.js";
 import Tooltip from '../tooltip/tooltip.js';
@@ -160,66 +161,15 @@ class Chart {
 			config: { ...this.config, viewport: this.viewport },
 			nightModeButton: this.nightModeButton,
 		});
-
 		this.map.init();
-		this.map.subscribe((nextViewport) => {
-			if (this.selectedPointIndex !== null) {
-				const tooltipX = this.getAbsoluteXCoordinate(this.selectedPointX, this.offsetX);
-
-				this.tooltip.updateTooltipPosition(tooltipX - CHART_PADDING, this.canvasSize.width);
-				this.shouldRerenderDatasets = true;
-			}
-
-			this.handleViewportChange(nextViewport);
-		});
 
 		this.legend = new ChartLegend(this.legendRootElement, this.config);
-
 		this.legend.init();
-		this.legend.subscribe((event) => {
-			this.toggleActiveDatasets(event);
-
-			const idx = this.selectedPointIndex;
-			const datasets = this.datasets.filter(d => d.targetOpacity !== 0);
-			this.tooltip.updateTooltipData(this.timeline[idx], this.getSelectedPointsData(datasets, idx));
-		});
-
-		this.nightModeButton.subscribe(isNightMode => {
-			this.isNightMode = isNightMode;
-			let tooltipBg;
-			let tooltipBorder;
-			let tooltipHeader;
-
-			if (this.isNightMode) {
-					tooltipBg = NIGHT_MODE_BG;
-				tooltipBorder = NIGHT_MODE_BG;
-					tooltipHeader = '#fff';
-			} else {
-				tooltipBg = '#fff';
-				tooltipBorder = '#eee';
-				tooltipHeader = '#000';
-			}
-
-			this.shouldRerenderDatasets = true;
-			this.tooltipRootElement.style.backgroundColor = tooltipBg;
-			this.tooltipRootElement.style.borderColor = tooltipBorder;
-			this.tooltipRootElement.querySelector('.selected-tooltip__header').style.color = tooltipHeader;
-
-			this.legendRootElement.classList.toggle('chart__legend--night-mode');
-
-			this.shouldRerenderDatasets = true;
-			this.shouldRerenderLabels = true;
-
-			this.scheduleNextFrame();
-		});
 
 		this.tooltip = new Tooltip(this.tooltipRootElement);
 		this.tooltip.init();
 
 		this.addEventListeners();
-
-		this.resizeIframe.contentWindow
-			.addEventListener('resize', debounce(() => this.handleFrameResize(), 100).bind(this));
 
 		this.scheduleNextFrame();
 		// this.rafId = requestAnimationFrame((ts) => this.startNextFrame(ts));
@@ -245,7 +195,7 @@ class Chart {
 		this.labelsCanvas.height = this.canvasSize.height * this.devicePixelRatio;
 	}
 
-	handleViewportChange(nextViewport) {
+	changeViewport(nextViewport) {
 		this.viewport.start = nextViewport.start;
 		this.viewport.end = nextViewport.end;
 		this.shouldRerenderDatasets = true;
@@ -662,25 +612,97 @@ class Chart {
 	}
 
 	addEventListeners() {
-		this.labelsCanvas.addEventListener('touchstart', event => {
-			const x = event.touches[0].clientX;
-			const virtualX = this.getRelativeXCoordinate(x, this.offsetX);
-			const i = Math.round(virtualX * (this.timeline.length - 1) / this.virtualWidth);
-			const idx = Math.max(0, Math.min(this.timeline.length, i));
-			const pointsData = this.getSelectedPointsData(this.getRenderedDatasets(), idx);
+		this.labelsCanvas.addEventListener('touchstart', event => this.showTooltip(event.touches[0].clientX));
+		this.labelsCanvas.addEventListener('touchmove', event => this.showTooltip(event.touches[0].clientX));
+		this.labelsCanvas.addEventListener('mousedown', event => this.showTooltip(event.clientX));
+		this.labelsCanvas.addEventListener('mousemove', event => this.showTooltip(event.clientX));
 
-			this.selectedPointIndex = idx;
-			this.selectedPointX = (this.timeline[idx] - this.timeline[0]) * this.ratioX;
-			this.tooltip.updateTooltipData(this.timeline[idx], pointsData);
+		clickOutside(this.rootElement, 'click', (_) => this.closeTooltip());
+		clickOutside(this.rootElement, 'touchstart', (_) => this.closeTooltip());
 
-			const tooltipX = Math.floor(this.getAbsoluteXCoordinate(this.selectedPointX, this.offsetX));
+		this.legend.subscribe((event) => this.handleLegendChange(event));
+		this.map.subscribe((nextViewport) => this.handleViewportChange(nextViewport));
+		this.nightModeButton.subscribe(isNightMode => this.handleThemeChange(isNightMode));
+
+		this.resizeIframe.contentWindow
+			.addEventListener('resize', debounce(() => this.handleFrameResize(), 100).bind(this));
+	};
+
+	handleThemeChange(isNightMode) {
+		this.isNightMode = isNightMode;
+		let tooltipBg;
+		let tooltipBorder;
+		let tooltipHeader;
+
+		if (this.isNightMode) {
+			tooltipBg = NIGHT_MODE_BG;
+			tooltipBorder = NIGHT_MODE_BG;
+			tooltipHeader = '#fff';
+		} else {
+			tooltipBg = '#fff';
+			tooltipBorder = '#eee';
+			tooltipHeader = '#000';
+		}
+
+		this.shouldRerenderDatasets = true;
+		this.tooltipRootElement.style.backgroundColor = tooltipBg;
+		this.tooltipRootElement.style.borderColor = tooltipBorder;
+		this.tooltipRootElement.querySelector('.selected-tooltip__header').style.color = tooltipHeader;
+
+		this.legendRootElement.classList.toggle('chart__legend--night-mode');
+		this.rootElement.classList.toggle('chart--night-mode');
+
+		this.shouldRerenderDatasets = true;
+		this.shouldRerenderLabels = true;
+
+		this.scheduleNextFrame();
+	}
+
+	handleViewportChange(nextViewport) {
+		if (this.selectedPointIndex !== null) {
+			const tooltipX = this.getAbsoluteXCoordinate(this.selectedPointX, this.offsetX);
 
 			this.tooltip.updateTooltipPosition(tooltipX - CHART_PADDING, this.canvasSize.width);
 			this.shouldRerenderDatasets = true;
+		}
 
-			this.scheduleNextFrame();
-		});
-	};
+		this.changeViewport(nextViewport);
+	}
+
+	handleLegendChange(event) {
+		this.toggleActiveDatasets(event);
+
+		const idx = this.selectedPointIndex;
+		const datasets = this.datasets.filter(d => d.targetOpacity !== 0);
+		this.tooltip.updateTooltipData(this.timeline[idx], this.getSelectedPointsData(datasets, idx));
+	}
+
+	showTooltip(x) {
+		const virtualX = this.getRelativeXCoordinate(x, this.offsetX);
+		const i = Math.round(virtualX * (this.timeline.length - 1) / this.virtualWidth);
+		const idx = Math.max(0, Math.min(this.timeline.length, i));
+		const pointsData = this.getSelectedPointsData(this.getRenderedDatasets(), idx);
+
+		this.selectedPointIndex = idx;
+		this.selectedPointX = (this.timeline[idx] - this.timeline[0]) * this.ratioX;
+		this.tooltip.updateTooltipData(this.timeline[idx], pointsData);
+
+		const tooltipX = Math.floor(this.getAbsoluteXCoordinate(this.selectedPointX, this.offsetX));
+
+		this.tooltip.updateTooltipPosition(tooltipX - CHART_PADDING, this.canvasSize.width);
+		this.shouldRerenderDatasets = true;
+
+		this.scheduleNextFrame();
+	}
+
+	closeTooltip() {
+		this.selectedPointIndex = null;
+		this.selectedPointX = null;
+		this.tooltip.hide();
+
+		this.shouldRerenderDatasets = true;
+		this.scheduleNextFrame();
+	}
 
 	getRenderedDatasets() {
 		return this.datasets.filter(dataset => +dataset.opacity.toFixed(2) > 0);

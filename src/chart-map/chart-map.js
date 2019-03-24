@@ -87,7 +87,7 @@ class ChartMap {
 		this.nightModeButton.subscribe(isNightMode => {
 			this.isNightMode = isNightMode;
 			this.sliderElement.style.boxShadow = this.isNightMode
-				? 'none'
+				? '0 20px 20px 9999px #17242f96'
 				: '0 20px 20px 9999px #e0e2e466';
 		});
 	}

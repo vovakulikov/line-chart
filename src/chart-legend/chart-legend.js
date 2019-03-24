@@ -30,6 +30,7 @@ class ChartLegend {
 
 		this.element.insertAdjacentHTML('beforeend', uiString);
 		this.element.addEventListener('change', (event) => {
+			event.stopPropagation();
 			this.next({ id: event.target.value, checked: event.target.checked });
 		});
 	}

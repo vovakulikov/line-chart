@@ -184,7 +184,7 @@ class ChartMap {
 		}
 
 		const prevTs = this.prevTs || ts;
-		const delta = Math.min(50, ts - prevTs);
+		const delta = Math.min(16, ts - prevTs);
 
 		// update prev timestamp
 		this.prevTs = ts;

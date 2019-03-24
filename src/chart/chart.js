@@ -172,10 +172,11 @@ class Chart {
 			if (this.selectedPointIndex !== null) {
 				const tooltipX = this.getAbsoluteXCoordinate(this.selectedPointX, this.offsetX);
 
-			this.tooltip.updateTooltipPosition(tooltipX - CHART_PADDING, this.canvasSize.width);
-			this.shouldRerenderDatasets = true;
+				this.tooltip.updateTooltipPosition(tooltipX - CHART_PADDING, this.canvasSize.width);
+				this.shouldRerenderDatasets = true;
+			}
 
-			this.handleViewportChange(nextViewport);}
+			this.handleViewportChange(nextViewport);
 		});
 
 		this.legend = new ChartLegend(this.legendRootElement, this.config);
@@ -339,7 +340,7 @@ class Chart {
 			// TODO Added memoization
 			? getLowerBorder(this.min, this.max, 0)
 			: this.lowerBorder;
-		const ratioY = chartHeight / (this.max - this.lowerBorder);
+		const ratioY = (chartHeight - 10) / (this.max - this.lowerBorder);
 		this.ratioX = this.virtualWidth / this.timelineDiff;
 
 		// Spring lower border

@@ -10,8 +10,12 @@ body {
     padding: 8px;
 }
 
-.chart {
-    margin-top: 40px;
+.chart:not(:last-child) {
+    margin-bottom: 40px;
+}
+
+.chart:last-child {
+    margin-bottom: 24px;
 }
 
 .chart_canvas-wrap {
@@ -50,7 +54,7 @@ body {
 
 .chart__header {
     margin-bottom: 20px;
-    font-size: 32px;
+    font-size: 28px;
     font-weight: bold;
 }
 

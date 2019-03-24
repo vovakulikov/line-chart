@@ -165,8 +165,14 @@ class Chart {
 		this.map.subscribe((nextViewport) => {
 			if (this.selectedPointIndex !== null) {
 				const tooltipX = this.getAbsoluteXCoordinate(this.selectedPointX, this.offsetX);
+				const pointValues = this.datasets.map(d => d.values[this.selectedPointIndex] * this.lastRatioY);
 
-				this.tooltip.updateTooltipPosition(tooltipX - CHART_PADDING, this.canvasSize.width);
+				this.tooltip.updateTooltipPosition({
+					xCoord: tooltipX - CHART_PADDING,
+					canvasWidth: this.canvasSize.width,
+					canvasHeight: this.canvasSize.height,
+					pointValues,
+				});
 				this.shouldRerenderDatasets = true;
 			}
 
@@ -186,21 +192,25 @@ class Chart {
 
 		this.nightModeButton.subscribe(isNightMode => {
 			this.isNightMode = isNightMode;
+			let chartHeaderColor;
 			let tooltipBg;
 			let tooltipBorder;
 			let tooltipHeader;
 
 			if (this.isNightMode) {
-					tooltipBg = NIGHT_MODE_BG;
+				chartHeaderColor = '#fff';
+				tooltipBg = NIGHT_MODE_BG;
 				tooltipBorder = NIGHT_MODE_BG;
-					tooltipHeader = '#fff';
+				tooltipHeader = '#fff';
 			} else {
+				chartHeaderColor = '#000';
 				tooltipBg = '#fff';
 				tooltipBorder = '#eee';
 				tooltipHeader = '#000';
 			}
 
 			this.shouldRerenderDatasets = true;
+			this.rootElement.querySelector('.chart__header').style.color = chartHeaderColor;
 			this.tooltipRootElement.style.backgroundColor = tooltipBg;
 			this.tooltipRootElement.style.borderColor = tooltipBorder;
 			this.tooltipRootElement.querySelector('.selected-tooltip__header').style.color = tooltipHeader;
@@ -213,7 +223,7 @@ class Chart {
 			this.scheduleNextFrame();
 		});
 
-		this.tooltip = new Tooltip(this.tooltipRootElement);
+		this.tooltip = new Tooltip(this.tooltipRootElement, this.datasetsCanvas);
 		this.tooltip.init();
 
 		this.addEventListeners();
@@ -681,8 +691,14 @@ class Chart {
 			this.tooltip.updateTooltipData(this.timeline[idx], pointsData);
 
 			const tooltipX = Math.floor(this.getAbsoluteXCoordinate(this.selectedPointX, this.offsetX));
+			const pointValues = this.datasets.map(d => d.values[this.selectedPointIndex] * this.lastRatioY);
 
-			this.tooltip.updateTooltipPosition(tooltipX - CHART_PADDING, this.canvasSize.width);
+			this.tooltip.updateTooltipPosition({
+				xCoord: tooltipX - CHART_PADDING,
+				canvasWidth: this.canvasSize.width,
+				canvasHeight: this.canvasSize.height,
+				pointValues,
+			});
 			this.shouldRerenderLabels = true;
 
 			this.scheduleNextFrame();

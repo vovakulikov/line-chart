@@ -59,7 +59,7 @@ class Tooltip {
         if (xCoord + width + tooltipLeftMargin > canvasWidth) {
             translateX = `translateX(${canvasWidth - width}px)`;
         } else if (width === 0) {
-            translateX = `translateX(${canvasWidth - MAX_WIDTH}px)`;
+            translateX = `translateX(${canvasWidth}px)`;
         } else if (xCoord + tooltipLeftMargin < 0) {
             translateX = `translateX(0px)`;
         } else {

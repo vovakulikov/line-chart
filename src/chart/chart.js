@@ -12,6 +12,7 @@ const VERTICAL_LINES = 5;
 const DATE_COEF = 1.68;
 const LABEL_WIDTH = 70;
 const CHART_PADDING = 25;
+const NIGHT_MODE_BG = '#242F3E';
 
 function calculateCanvasWidth (containerWidth, {start, end}) {
 	return containerWidth / (end - start);
@@ -78,9 +79,10 @@ class Chart {
 	// 	]
 	// };
 
-	constructor({ rootElement, config }) {
+	constructor({ rootElement, config, nightModeButton }) {
 		this.rootElement = rootElement;
 		this.config = config;
+		this.nightModeButton = nightModeButton;
 		this.timeline = this.config.timeline || [];
 		this.datasets = null;
 
@@ -125,7 +127,8 @@ class Chart {
 
 		this.map = new ChartMap({
 			rootElement: this.mapRootElement,
-			config: { ...this.config, viewport: this.viewport }
+			config: { ...this.config, viewport: this.viewport },
+			nightModeButton: this.nightModeButton,
 		});
 
 		this.datasetsCanvas = this.rootElement.querySelector('.canvas_for-datasets');
@@ -170,6 +173,21 @@ class Chart {
 			const idx = this.selectedPointIndex;
 			const datasets = this.datasets.filter(d => d.targetOpacity !== 0);
 			this.tooltip.updateTooltipData(this.timeline[idx], this.getSelectedPointsData(datasets, idx));
+		});
+
+		this.nightModeButton.subscribe(isNightMode => {
+			this.isNightMode = isNightMode;
+			this.tooltipRootElement.style.backgroundColor = this.isNightMode
+				? NIGHT_MODE_BG
+				: '#fff';
+			this.tooltipRootElement.style.borderColor = this.isNightMode
+				? NIGHT_MODE_BG
+				: '#eee';
+			this.tooltipRootElement.querySelector('.selected-tooltip__header').style.color = this.isNightMode
+				? '#fff'
+				: '#000';
+
+			this.shouldRerenderDatasets = true;
 		});
 
 		this.tooltip = new Tooltip(this.tooltipRootElement);
@@ -484,15 +502,21 @@ class Chart {
 		const r = 6.0;
 
 		this.datasetsCtx.save();
+
+		this.datasetsCtx.lineWidth = 2;
+		this.datasetsCtx.strokeStyle = 'rgba(0, 0, 0, 0.08)';
+		this.datasetsCtx.beginPath();
+		this.datasetsCtx.moveTo(x - r / 2 + 3, 0);
+		this.datasetsCtx.lineTo(x - r / 2 + 3, this.canvasSize.height - LABEL_OFFSET);
+		this.datasetsCtx.stroke();
+
 		this.datasetsCtx.beginPath();
 		this.datasetsCtx.strokeStyle = color;
 		this.datasetsCtx.lineWidth = 6.0;
 		this.datasetsCtx.fillStyle = this.isNightMode
-			? '#017'
+			? NIGHT_MODE_BG
 			: '#fff';
-
 		this.datasetsCtx.arc(x - r + 5, y - r + 5, r, 0, Math.PI * 2);
-
 		this.datasetsCtx.stroke();
 		this.datasetsCtx.fill();
 		this.datasetsCtx.restore();

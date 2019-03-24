@@ -2,7 +2,7 @@
     visibility: hidden;
     background-color: #fff;
     padding: 16px 24px;
-    border: 2px solid #eee;
+    box-shadow: 0 2px 8px 0 rgba(0, 0, 0, 0.2), 0 2px 20px 0 rgba(0, 0, 0, 0.2);
     border-radius: 6px;
     position: absolute;
     z-index: 4;

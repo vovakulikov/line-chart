@@ -2,7 +2,7 @@
 .legend-button {
     display: flex;
     align-items: center;
-    padding: 8px 24px 8px 8px;
+    padding: 8px 16px 8px 8px;
     border: 1px solid #eee;
     border-radius: 32px;
     color: #555;
@@ -18,8 +18,8 @@
 
 .legend-button__checkbox-badge {
     display: block;
-    width: 28px;
-    height: 28px;
+    width: 24px;
+    height: 24px;
     border-radius: 50%;
     border: 2px solid currentColor;
     position: relative;
@@ -67,13 +67,17 @@
 }
 
 .legend-button__text {
-    font-size: 18px;
+    font-size: 16px;
     font-weight: 300;
-    margin-left: 12px;
+    margin-left: 8px;
     user-select: none;
     -moz-user-select: none;
 }
 
 .chart__legend--night-mode .legend-button__text {
     color: #fff;
+}
+
+.chart__legend--night-mode .legend-button {
+    border-color: #bacde073;
 }

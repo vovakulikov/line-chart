@@ -100,7 +100,7 @@ class Chart {
 		this.canvasSize = null;
 		this.virtualWidth = null;
 		this.offsetX = null;
-		this.viewport = { start: 0.5, end: 1.0 };
+		this.viewport = { start: 0.7, end: 1.0 };
 
 		this.prevTs = null;
 		this.delta = null;

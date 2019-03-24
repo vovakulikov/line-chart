@@ -1,8 +1,8 @@
 .night-mode-button {
     display: block;
     color: rgb(0, 136, 204);
-    font-size: 28px;
-    margin: 24px auto 0;
+    font-size: 16px;
+    margin: 32px auto 16px;
     cursor: pointer;
     font-weight: 400;
 }

@@ -10,7 +10,7 @@
 }
 
 .selected-tooltip__header {
-    font-size: 12px;
+    font-size: 14px;
 }
 
 .selected-tooltip__label-container {
@@ -30,11 +30,11 @@
 
 .selected-tooltip__value {
     font-weight: bold;
-    font-size: 16px;
+    font-size: 18px;
 }
 
 .selected-tooltip__chart-name {
     margin-top: 4px;
     font-weight: 300;
-    font-size: 11px;
+    font-size: 13px;
 }

@@ -347,6 +347,7 @@ class Chart {
 				}
 			}
 
+			this.selectedPointX = (this.timeline[this.selectedPointIndex] - this.timeline[0]) * this.lastRatioX;
 			this.drawSelectedVerticalLine();
 
 			for (let i = 0; i < this.datasets.length; i++) {
@@ -354,8 +355,6 @@ class Chart {
 				    const dataset = this.datasets[i];
 
                     if (this.selectedPointIndex !== null && dataset.targetOpacity !== 0) {
-                        this.selectedPointX = (this.timeline[this.selectedPointIndex] - this.timeline[0]) * this.lastRatioX;
-
                         this.drawSelectedPoint(
                             this.selectedPointX,
                             this.getRelativeY(chartHeight, dataset.values[this.selectedPointIndex], this.lastRatioY),

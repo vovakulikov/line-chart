@@ -167,12 +167,14 @@ class Chart {
 
 		this.map.init();
 		this.map.subscribe((nextViewport) => {
-            const tooltipX = this.getAbsoluteXCoordinate(this.selectedPointX, this.offsetX);
+			if (this.selectedPointIndex !== null) {
+				const tooltipX = this.getAbsoluteXCoordinate(this.selectedPointX, this.offsetX);
 
-            this.tooltip.updateTooltipPosition(tooltipX - CHART_PADDING, this.datasetsCanvas.width);
-            this.shouldRerenderDatasets = true;
+				this.tooltip.updateTooltipPosition(tooltipX - CHART_PADDING, this.datasetsCanvas.width);
+				this.shouldRerenderDatasets = true;
 
-            this.handleViewportChange(nextViewport);
+				this.handleViewportChange(nextViewport);
+			}
 		});
 
 		this.legend = new ChartLegend(this.legendRootElement, this.config);
@@ -187,17 +189,28 @@ class Chart {
 
         this.nightModeButton.subscribe(isNightMode => {
             this.isNightMode = isNightMode;
-            this.tooltipRootElement.style.backgroundColor = this.isNightMode
-                ? NIGHT_MODE_BG
-                : '#fff';
-            this.tooltipRootElement.style.borderColor = this.isNightMode
-                ? NIGHT_MODE_BG
-                : '#eee';
-            this.tooltipRootElement.querySelector('.selected-tooltip__header').style.color = this.isNightMode
-                ? '#fff'
-                : '#000';
+            let tooltipBg;
+            let tooltipBorder;
+            let tooltipHeader;
 
-            this.shouldRerenderDatasets = true
+            if (this.isNightMode) {
+				tooltipBg = NIGHT_MODE_BG;
+				tooltipBorder = NIGHT_MODE_BG;
+				tooltipHeader = '#fff';
+			} else {
+				tooltipBg = '#fff';
+				tooltipBorder = '#eee';
+				tooltipHeader = '#000';
+			}
+
+            this.tooltipRootElement.style.backgroundColor = tooltipBg;
+            this.tooltipRootElement.style.borderColor = tooltipBorder;
+            this.tooltipRootElement.querySelector('.selected-tooltip__header').style.color = tooltipHeader;
+
+			this.legendRootElement.classList.toggle('chart__legend--night-mode');
+
+            this.shouldRerenderDatasets = true;
+            this.shouldRerenderLabels = true;
 
 			if (!this.rafId) {
 				this.rafId = requestAnimationFrame((ts) => this.scheduleNextFrame(ts));
@@ -417,7 +430,9 @@ class Chart {
 
 		this.labelsCtx.lineWidth = 1;
 		this.labelsCtx.font = `13px Arial`;
-		this.labelsCtx.fillStyle = 'rgba(0, 0, 0, 0.4)';
+		this.labelsCtx.fillStyle = this.isNightMode
+			? hexToRGB('#bacde073', 0.4)
+			: hexToRGB('#000000', 0.4);
 
 		let isLabelsAnimating = false;
 
@@ -442,8 +457,12 @@ class Chart {
 			this.labelsCtx.beginPath();
 			this.labelsCtx.moveTo(0, +y.toPrecision(4));
 			this.labelsCtx.lineTo(this.virtualWidth, +y.toPrecision(4));
-			this.labelsCtx.fillStyle = `rgba(0,0,0, ${label.opacity.toPrecision(3)})`;
-			this.labelsCtx.strokeStyle = `rgba(0, 0, 0, ${label.strokeOpacity})`;
+			this.labelsCtx.fillStyle = this.isNightMode
+				? hexToRGB('#bacde073', label.opacity.toPrecision(3))
+				: hexToRGB('#000000', label.opacity.toPrecision(3));
+			this.labelsCtx.strokeStyle = this.isNightMode
+				? hexToRGB('#bacde073', label.strokeOpacity)
+				: hexToRGB('#000000', label.strokeOpacity);
 			this.labelsCtx.fillText(Math.floor(label.currentValue), offsetX + 10, y - 6);
 			this.labelsCtx.stroke();
 
@@ -511,7 +530,9 @@ class Chart {
 		this.labelsCtx.save();
 
 		this.labelsCtx.font = `14px Arial`;
-		this.labelsCtx.fillStyle = 'rgba(0, 0, 0, 0.4)';
+		this.labelsCtx.fillStyle = this.isNightMode
+			? hexToRGB('#bacde073', 0.4)
+			: hexToRGB('#000000', 0.4);
 
 		let isLabelsAnimating = false;
 
@@ -531,7 +552,9 @@ class Chart {
 			this.labelsCtx.beginPath();
 			this.labelsCtx.moveTo(label.x, this.canvasSize.height);
 
-			this.labelsCtx.fillStyle = `rgba(0,0,0, ${label.opacity.toPrecision(3)})`;
+			this.labelsCtx.fillStyle = this.isNightMode
+				? hexToRGB('#bacde073', label.opacity.toPrecision(3))
+				: hexToRGB('#000000', label.opacity.toPrecision(3));
 			this.labelsCtx.fillText(label.text, x, this.canvasSize.height - 20);
 			this.labelsCtx.restore();
 		}
@@ -575,7 +598,9 @@ class Chart {
 
 	drawSelectedVerticalLine() {
 		this.datasetsCtx.lineWidth = 2;
-		this.datasetsCtx.strokeStyle = 'rgba(0, 0, 0, 0.08)';
+		this.datasetsCtx.strokeStyle = this.isNightMode
+			? hexToRGB('#bacde073', 0.08)
+			: hexToRGB('#000000', 0.08);
 		this.datasetsCtx.beginPath();
 		this.datasetsCtx.moveTo(this.selectedPointX, 0);
 		this.datasetsCtx.lineTo(this.selectedPointX, this.canvasSize.height - LABEL_OFFSET);

@@ -1,59 +1,36 @@
 <!DOCTYPE html>
-<html>
-  <head>
-    <meta charset="utf-8"/>
-    <title>Telegram contest</title>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta content="width=device-width,initial-scale=1.0,minimum-scale=1.0" name="viewport">
 
-    <link rel="stylesheet" type="text/css" href="examples/css/telegram_chart.css">
-  </head>
+    <title>Followers</title>
 
-  <body>
-    <div class="app-container">
-      <h1 class="chart-header">Followers</h1>
+    <link rel="stylesheet" href="./css/destyle.css">
+    <link rel="stylesheet" href="./css/chart.css">
+    <link rel="stylesheet" href="./src/chart/chart.css">
+    <link rel="stylesheet" href="./src/chart-map/chart-map.css">
+    <link rel="stylesheet" href="./src/legend/legend.css">
+    <link rel="stylesheet" href="./src/tooltip/tooltip.css">
+    <link rel="stylesheet" href="./src/night-mode-button/night-mode-button.css">
+</head>
+<body>
 
-      <div class="chart-container">
-        <canvas
-            class="subscribers-chart"
-            width="900"
-            height="750">
-        </canvas>
-      </div>
+    <index id="root">
+        <button class="night-mode-button">Switch to Night Mode</button>
+    </index>
 
-      <div class="map-container">
-
-        <div class="map__touch-container">
-          <div class="map__touch-circle"></div>
-        </div>
-
-        <div class="mini-map__wrapper">
-          <canvas class="mini-map"
-                  width="900" height="100">
-          </canvas>
-
-          <div class="slider">
-            <div class="left_hand"></div>
-            <div class="right_hand"></div>
-          </div>
-
-        </div>
-      </div>
-
-
-      <div class="chart-legend"></div>
-    </div>
-
-    <div class="selected-tooltip">
-      <div class="selected-tooltip__header"></div>
-
-      <div class="selected-tooltip__label-container"></div>
-    </div>
-
-    <script type="module" src="./settings.js"></script>
-    <script type="module" src="chart_data.js"></script>
-    <script type="module" src="./helpers.js"></script>
-    <script type="module" src="./Stream.js"></script>
-    <script type="module" src="./Chart.js"></script>
-    <script type="module" src="./ChartMap.js"></script>
     <script type="module" src="./index.js"></script>
-  </body>
+    <script type="module" src="./src/utils/format-date.js"></script>
+    <script type="module" src="./src/utils/hex-to-rgb.js"></script>
+    <script type="module" src="./src/utils/get-coords.js"></script>
+    <script type="module" src="./src/utils/raf-throttle.js"></script>
+    <script type="module" src="./src/utils/parse-data.js"></script>
+    <script type="module" src="./src/utils/get-min-max-range.js"></script>
+    <script type="module" src="./src/night-mode-button/night-mode-button.js"></script>
+    <script type="module" src="./src/tooltip/tooltip.js"></script>
+    <script type="module" src="./src/chart-map/chart-map.js"></script>
+    <script type="module" src="./src/chart-composer.js"></script>
+    <script type="module" src="./src/legend/chart-legend.js"></script>
+</body>
 </html>

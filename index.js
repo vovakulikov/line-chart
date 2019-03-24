@@ -1,25 +1,29 @@
-import {chartData} from './chart_data.js';
-import {Chart} from './Chart.js';
-import {ChartMap} from './ChartMap.js';
-import {Stream} from './Stream.js';
 
-// entry point
-window.onload = () => {
-    const canvas = document.querySelector('.subscribers-chart');
-    const chartContainer = document.querySelector('.chart-container');
-    const minimapCanvas = document.querySelector('.mini-map');
-    const legend = document.querySelector('.chart-legend');
-    const chartIndex = 0;
+import Chart from './src/chart/chart.js';
+import parseData from './src/utils/parse-data.js';
+import NightModeButton from "./src/night-mode-button/night-mode-button.js";
 
-    const viewport$ = new Stream({start: 0.7, end: 1.0});
-    const displayedCharts$ = new Stream(new Set(Object.keys(chartData[chartIndex].names)));
-    const chart = new Chart(canvas, chartContainer, legend, chartData[chartIndex], viewport$, displayedCharts$);
-    const minimap = new ChartMap(minimapCanvas, chartData[chartIndex], viewport$, displayedCharts$);
 
-    viewport$.subscribe(value => {
-        console.log(value);
-    });
+async function main () {
 
-    chart.init();
-    minimap.init();
-};
+	const data = await fetch('chart_data.json')
+		.then((r) => r.json())
+		.then((rawData) => parseData(rawData));
+
+	const rootElement = document.querySelector('#root');
+	const nightModeButtonElement = document.querySelector('.night-mode-button');
+	const nightModeButton = new NightModeButton(nightModeButtonElement, false);
+
+	for(let i = 0; i < data.length; i++) {
+		const chartContainer = document.createElement('div');
+		chartContainer.setAttribute('class', 'chart');
+		rootElement.appendChild(chartContainer);
+
+		const chart = new Chart({ rootElement: chartContainer, config: data[i], nightModeButton });
+
+		chart.init();
+	}
+}
+
+
+main();

@@ -3,9 +3,9 @@ class ChartLegend {
 
 	static getButtonTemplate({ id, text, color }) {
 		return `
-			<label class="chart-legend__button legend-button" style="color: ${color}">
+			<label class="chart-legend__button legend-button">
 				<input type="checkbox" checked value="${id}" class="legend-button__checkbox-input">
-				<span class="legend-button__checkbox-badge"></span>
+				<span class="legend-button__checkbox-badge" style="color: ${color}"></span>
 				<span class="legend-button__text">${text}</span>
 			</label>
 		`;

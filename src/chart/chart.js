@@ -584,7 +584,7 @@ class Chart {
 	}
 
 	drawSelectedPoint(x, y, color) {
-		const r = 6.0;
+		const r = 4.0;
 
 		this.datasetsCtx.save();
 
@@ -594,7 +594,7 @@ class Chart {
 		this.datasetsCtx.fillStyle = this.isNightMode
 			? NIGHT_MODE_BG
 			: '#fff';
-		this.datasetsCtx.arc(x - r + 5, y - r + 5, r, 0, Math.PI * 2);
+		this.datasetsCtx.arc(x, y, r, 0, Math.PI * 2);
 		this.datasetsCtx.stroke();
 		this.datasetsCtx.fill();
 		this.datasetsCtx.restore();

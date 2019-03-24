@@ -45,6 +45,9 @@ class Chart {
 	getTemplate(id = 0) {
 		return `
 			<section class="chart" id="chart-${id}">
+			 	<div class="chart__header">
+        	Followers
+      	</div>
 				<div class="chart_canvas-wrap">
 					<canvas
 						class="chart__canvas canvas_for-datasets">

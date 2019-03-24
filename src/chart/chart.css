@@ -42,9 +42,8 @@ body {
     padding: 16px 24px 0;
 }
 
-.chart-header {
-    padding: 0 24px;
-    margin-bottom: 12px;
+.chart__header {
+    margin-bottom: 20px;
     font-size: 32px;
     font-weight: bold;
 }

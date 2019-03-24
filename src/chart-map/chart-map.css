@@ -35,7 +35,17 @@
 .chart-map__hand {
     width: 10px;
     height: 100%;
+    position: absolute;
+    top: 0;
     background-color: #bacde073;
+}
+
+.chart-map__hand::before {
+    content: '';
+    display: block;
+    width: 30px;
+    height: 100%;
+
     position: absolute;
     top: 0;
 }
@@ -44,7 +54,17 @@
     left: 0;
 }
 
+.chart-map__left-hand::before {
+    left: 0;
+    transform: translateX(-100%);
+}
+
 .chart-map__right-hand {
     left: 100%;
     transform: translate(-100%);
 }
+
+.chart-map__right-hand::before {
+    left: 100%;
+}
+

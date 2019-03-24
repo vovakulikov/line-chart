@@ -13,15 +13,15 @@ async function main () {
 	const rootElement = document.querySelector('#root');
 	// const charts = [];
 
-	// for(let i = 0; i < data.length; i++) {
-	// 	const chartContainer = document.createElement('div');
-	// 	chartContainer.setAttribute('class', 'chart');
-	// 	rootElement.appendChild(chartContainer);
-	//
-	// 	const chart = new Chart({ rootElement: chartContainer, config: data[i] });
-	//
-	// 	chart.init();
-	// }
+	for(let i = 0; i < data.length; i++) {
+		const chartContainer = document.createElement('div');
+		chartContainer.setAttribute('class', 'chart');
+		rootElement.appendChild(chartContainer);
+
+		const chart = new Chart({ rootElement: chartContainer, config: data[i] });
+
+		chart.init();
+	}
 
 	// for(let i = 0; i < data.length; i++) {
 	// 	const chartContainer = document.createElement('div');
@@ -36,8 +36,8 @@ async function main () {
 	//
 	// chartsComposer.start();
 
-	const chart = new Chart({ rootElement: rootElement, config: data[0] });
-	chart.init();
+	// const chart = new Chart({ rootElement: rootElement, config: data[0] });
+	// chart.init();
 
 }
 

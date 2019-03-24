@@ -368,30 +368,37 @@ class Chart {
 			this.labelsCtx.clearRect(0, 0, this.virtualWidth, this.canvasSize.height);
 
 			this.drawGrid(ratioY, this.ratioX, this.lowerBorder);
-		}
+
+            this.selectedPointX = (this.timeline[this.selectedPointIndex] - this.timeline[0]) * this.ratioX;
+
+            this.drawSelectedVerticalLine();
+
+            for (let i = 0; i < this.datasets.length; i++) {
+                if (+this.datasets[i].opacity.toFixed(2) > 0) {
+
+                    if (this.selectedPointIndex !== null && this.datasets[i].targetOpacity !== 0) {
+                        this.drawSelectedPoint(
+                            this.selectedPointX,
+                            this.getRelativeY(
+                                chartHeight,
+                                this.datasets[i].values[this.selectedPointIndex],
+                                this.lastRatioY
+                            ),
+                            this.datasets[i].color
+                        );
+                    }
+                }
+            }
+
+        }
 
 		if (this.shouldRerenderDatasets || shouldRerenderDatasets || isRatioYChanging || isLowerBorderChanging) {
 			this.datasetsCtx.setTransform(this.devicePixelRatio, 0, 0, this.devicePixelRatio, this.offsetX * this.devicePixelRatio, 0);
 			this.datasetsCtx.clearRect(0, 0, this.virtualWidth, this.canvasSize.height);
 
-			this.selectedPointX = (this.timeline[this.selectedPointIndex] - this.timeline[0]) * this.ratioX;
-			this.drawSelectedVerticalLine();
-
 			for (let i = 0; i < this.datasets.length; i++) {
 				if (+this.datasets[i].opacity.toFixed(2) > 0) {
 					this.drawChart(this.datasets[i], this.lastRatioY, this.ratioX);
-				}
-
-				if (this.selectedPointIndex !== null && this.datasets[i].targetOpacity !== 0) {
-					this.drawSelectedPoint(
-						this.selectedPointX,
-						this.getRelativeY(
-							chartHeight,
-							this.datasets[i].values[this.selectedPointIndex],
-							this.lastRatioY
-						),
-						this.datasets[i].color
-					);
 				}
 			}
 
@@ -612,31 +619,31 @@ class Chart {
 	}
 
 	drawSelectedVerticalLine() {
-		this.datasetsCtx.lineWidth = 2;
-		this.datasetsCtx.strokeStyle = this.isNightMode
+		this.labelsCtx.lineWidth = 2;
+		this.labelsCtx.strokeStyle = this.isNightMode
 			? hexToRGB('#bacde073', 0.08)
 			: hexToRGB('#000000', 0.08);
-		this.datasetsCtx.beginPath();
-		this.datasetsCtx.moveTo(this.selectedPointX, 0);
-		this.datasetsCtx.lineTo(this.selectedPointX, this.canvasSize.height - LABEL_OFFSET);
-		this.datasetsCtx.stroke();
+		this.labelsCtx.beginPath();
+		this.labelsCtx.moveTo(this.selectedPointX, 0);
+		this.labelsCtx.lineTo(this.selectedPointX, this.canvasSize.height - LABEL_OFFSET);
+		this.labelsCtx.stroke();
 	}
 
 	drawSelectedPoint(x, y, color) {
 		const r = 4.0;
 
-		this.datasetsCtx.save();
+		this.labelsCtx.save();
 
-		this.datasetsCtx.beginPath();
-		this.datasetsCtx.strokeStyle = color;
-		this.datasetsCtx.lineWidth = 4.0;
-		this.datasetsCtx.fillStyle = this.isNightMode
+		this.labelsCtx.beginPath();
+		this.labelsCtx.strokeStyle = color;
+		this.labelsCtx.lineWidth = 4.0;
+		this.labelsCtx.fillStyle = this.isNightMode
 			? NIGHT_MODE_BG
 			: '#fff';
-		this.datasetsCtx.arc(x, y, r, 0, Math.PI * 2);
-		this.datasetsCtx.stroke();
-		this.datasetsCtx.fill();
-		this.datasetsCtx.restore();
+		this.labelsCtx.arc(x, y, r, 0, Math.PI * 2);
+		this.labelsCtx.stroke();
+		this.labelsCtx.fill();
+		this.labelsCtx.restore();
 	}
 
 	getVerticalBorders(datasets, startDate, dueDate) {
@@ -676,7 +683,7 @@ class Chart {
 			const tooltipX = Math.floor(this.getAbsoluteXCoordinate(this.selectedPointX, this.offsetX));
 
 			this.tooltip.updateTooltipPosition(tooltipX - CHART_PADDING, this.canvasSize.width);
-			this.shouldRerenderDatasets = true;
+			this.shouldRerenderLabels = true;
 
 			this.scheduleNextFrame();
 		});

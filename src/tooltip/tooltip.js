@@ -46,7 +46,7 @@ class Tooltip {
 
     updateTooltipPosition(xCoord, canvasWidth) {
         const tooltipLeftMargin = -24;
-        const translateY = `translateY(${16}px)`;
+        const translateY = `translateY(${40}px)`;
         let translateX;
 
         if (Math.floor(xCoord) > canvasWidth || Math.ceil(xCoord) < 0) {

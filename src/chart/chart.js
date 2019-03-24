@@ -11,6 +11,7 @@ const HORIZONTAL_LINES = 5;
 const VERTICAL_LINES = 5;
 const DATE_COEF = 1.68;
 const LABEL_WIDTH = 70;
+const CHART_PADDING = 25;
 
 function calculateCanvasWidth (containerWidth, {start, end}) {
 	return containerWidth / (end - start);
@@ -43,6 +44,8 @@ class Chart {
 	getTemplate(id = 0) {
 		return `
 			<section class="chart" id="chart-${id}">
+				<div class="selected-tooltip"></div>
+
 				<div class="chart_canvas-wrap">
 					<canvas
 						class="chart__canvas canvas_for-datasets">
@@ -53,7 +56,6 @@ class Chart {
 				<div class="chart__map"></div>
 				<div class="chart__legend chart-legend"></div>
 				
-				<div class="selected-tooltip"></div>
 			</section>
 		`;
 	}
@@ -154,9 +156,9 @@ class Chart {
 			this.viewport.start = nextViewport.start;
 			this.viewport.end = nextViewport.end;
 
-			const tooltipX = this.getAbsoluteXCoordinate(this.selectedPointX, this.virtualWidth, this.offsetX);
+			const tooltipX = this.getAbsoluteXCoordinate(this.selectedPointX, this.offsetX);
 
-			this.tooltip.updateTooltipPosition(tooltipX, 25, this.datasetsCanvas.width + 25);
+			this.tooltip.updateTooltipPosition(tooltipX - CHART_PADDING, this.datasetsCanvas.width);
 			this.shouldRerenderDatasets = true;
 		});
 
@@ -275,7 +277,7 @@ class Chart {
 			this.getRenderedDatasets().forEach(dataset => {
 				this.drawChart(dataset, this.lastRatioY, ratioX);
 
-				if (this.selectedPointIndex && dataset.targetOpacity !== 0) {
+				if (this.selectedPointIndex !== null && dataset.targetOpacity !== 0) {
 					this.selectedPointX = (this.timeline[this.selectedPointIndex] - this.timeline[0]) * this.lastRatioX;
 
 					this.drawSelectedPoint(
@@ -521,14 +523,18 @@ class Chart {
 	addEventListeners() {
 		this.labelsCanvas.addEventListener('touchstart', event => {
 			const x = event.touches[0].clientX;
-			const virtualX = this.getRelativeXCoordinate(x, this.virtualWidth, this.offsetX);
-			const idx = Math.round(virtualX * this.timeline.length / this.virtualWidth) - 1;
+			const virtualX = this.getRelativeXCoordinate(x, this.offsetX);
+			const i = Math.round(virtualX * (this.timeline.length - 1) / this.virtualWidth);
+			const idx = Math.max(0, Math.min(this.timeline.length, i));
 			const pointsData = this.getSelectedPointsData(this.getRenderedDatasets(), idx);
 
 			this.selectedPointIndex = idx;
 			this.selectedPointX = (this.timeline[idx] - this.timeline[0]) * this.lastRatioX;
 			this.tooltip.updateTooltipData(this.timeline[idx], pointsData);
-			this.tooltip.updateTooltipPosition(this.getAbsoluteXCoordinate(this.selectedPointX, this.virtualWidth, this.offsetX));
+
+			const tooltipX = Math.floor(this.getAbsoluteXCoordinate(this.selectedPointX, this.offsetX));
+
+			this.tooltip.updateTooltipPosition(tooltipX - CHART_PADDING, this.datasetsCanvas.width);
 
 			this.shouldRerenderDatasets = true;
 			event.preventDefault();
@@ -549,12 +555,12 @@ class Chart {
 		});
 	}
 
-	getRelativeXCoordinate(xCoord, virtualWidth, offsetX) {
-		return xCoord - offsetX - 25;
+	getRelativeXCoordinate(xCoord, offsetX) {
+		return xCoord - offsetX - CHART_PADDING;
 	}
 
-	getAbsoluteXCoordinate(xCoord, virtualWidth, offsetX) {
-		return xCoord + offsetX + 25;
+	getAbsoluteXCoordinate(xCoord, offsetX) {
+		return xCoord + offsetX + CHART_PADDING;
 	}
 }
 

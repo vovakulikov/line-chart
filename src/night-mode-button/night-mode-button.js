@@ -11,8 +11,7 @@ class NightModeButton {
         this.element.addEventListener('click', this.clickListener.bind(this));
     }
 
-    clickListener(event) {
-        event.stopPropagation();
+    clickListener() {
         this.isNightMode = !this.isNightMode;
         this.element.textContent = `Switch to ${this.isNightMode ? 'Day' : 'Night'} mode`;
         document.body.classList.toggle('night-mode_is-on');

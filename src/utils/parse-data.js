@@ -26,7 +26,6 @@ export default function parseData(parsedData) {
 
 			const nameAxisX = Object.keys(types).find((key) => types[key] === TIMELINE_TYPE);
 
-			// [VK] TODO Added check for equal length of datasets and timeline
 			const axesData = columns.reduce((memo, currentColumn) => {
 				const columnName = currentColumn[0];
 				const columnDataset = currentColumn.slice(1);

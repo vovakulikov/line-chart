@@ -255,7 +255,6 @@ class Chart {
 			// Maybe we don't need this line
 			cancelAnimationFrame(this.rafId);
 			this.rafId = null;
-			console.log('not rerender');
 
 			return;
 		}
@@ -303,7 +302,6 @@ class Chart {
 
 		[this.min, this.max] = this.getVerticalBorders(activeDatasets, startTimestamp, dueTimestamp);
 		this.lowerBorder = activeDatasets.length > 0
-			// TODO Added memoization
 			? getLowerBorder(this.min, this.max, 0)
 			: this.lowerBorder;
 		const ratioY = (chartHeight - 10) / (this.max - this.lowerBorder);
@@ -645,8 +643,18 @@ class Chart {
 		this.labelsCanvas.addEventListener('mousedown', event => this.showTooltip(event.clientX));
 		this.labelsCanvas.addEventListener('mousemove', event => this.showTooltip(event.clientX));
 
-		clickOutside(this.rootElement, 'click', (_) => this.closeTooltip());
-		clickOutside(this.rootElement, 'touchstart', (_) => this.closeTooltip());
+		const nightModeButton = this.nightModeButton.element;
+
+		clickOutside(this.rootElement, 'click', (e) => {
+			if (!nightModeButton.contains(event.target) && nightModeButton !== event.target) {
+				this.closeTooltip();
+			}
+		});
+		clickOutside(this.rootElement, 'touchstart', (e) => {
+			if (!nightModeButton.contains(event.target) && nightModeButton !== event.target) {
+				this.closeTooltip()
+			}
+		});
 
 		this.legend.subscribe((event) => this.handleLegendChange(event));
 		this.map.subscribe((nextViewport) => this.handleViewportChange(nextViewport));
@@ -747,12 +755,10 @@ class Chart {
 		});
 	}
 
-	// TODO move to utils or static
 	getRelativeXCoordinate(xCoord, offsetX) {
 		return xCoord - offsetX - CHART_PADDING;
 	}
 
-	// TODO move to utils or static
 	getAbsoluteXCoordinate(xCoord, offsetX) {
 		return xCoord + offsetX + CHART_PADDING;
 	}

@@ -10,4 +10,7 @@ Project for the Telegram coding contest
 - **Flexible**: Fit chart in any container 
 - **Data map**: Use map as a control system to navigate across all data
 - **Touch support**: Try this demo on touch device.
-- **No dependencies** 
+- **No dependencies**
+ 
+[Live Line Chart Demo](https://vovakulikov.github.io/line-chart/)
+
